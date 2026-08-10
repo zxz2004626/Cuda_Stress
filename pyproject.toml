@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cuda-stress"
+version = "1.0.0"
+description = "Deterministic CUDA compiler correctness differential-testing pipeline (nvcc/cicc/ptxas wrong-code hunting)"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=5.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=6.2"]
+
+[tool.setuptools]
+packages = [
+    "cuda_stress",
+    "cuda_stress.pipeline",
+    "cuda_stress.generator",
+    "cuda_stress.generator.strategies",
+]

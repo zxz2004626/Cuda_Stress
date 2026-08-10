@@ -1,0 +1,45 @@
+{
+  "block": [
+    64
+  ],
+  "case_id": "memory_address__c1afd58035942d6a",
+  "comparison_policy": "exact_u64",
+  "config_seed": 20260810,
+  "cpu_oracle": "memory_address",
+  "cuda_features": [
+    "sm_86",
+    "ldg_ca_cg_cs"
+  ],
+  "generator_version": "1.0.0",
+  "grid": [
+    1
+  ],
+  "hashes": {
+    "expected": "sha256:cdcaf61cc231f45e6fdef66cc671e2e9771708eb553c4809adfa2b75a729d5c6",
+    "input": "sha256:e4733c2eaa57055cba76a9cc1a7ba86699a6934539c76b95e0c50224ddfee000",
+    "source": "sha256:862e9ff78a70a9df65e2e28a9e8c227728b7509d35798ea231bee6adff843eba"
+  },
+  "input_word_count": 256,
+  "kernel_entry": "test_kernel",
+  "kernel_seed": 11745599207278380358,
+  "output_word_count": 128,
+  "output_words_per_thread": 2,
+  "reject_reason": "",
+  "sanitizer_policy": "none",
+  "strategy": "memory_address",
+  "strategy_params": {
+    "cache_policy": "ca",
+    "reads": 76,
+    "structs": true,
+    "vectors": false,
+    "widths": [
+      8,
+      16,
+      64
+    ]
+  },
+  "target_sm": "sm_86",
+  "test_id": "memory_address__13527ca__c0ffef",
+  "test_seed": 12648431,
+  "valid": true
+}

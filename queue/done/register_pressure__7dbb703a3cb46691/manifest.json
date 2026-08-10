@@ -1,0 +1,43 @@
+{
+  "block": [
+    64
+  ],
+  "case_id": "register_pressure__7dbb703a3cb46691",
+  "comparison_policy": "exact_u64",
+  "config_seed": 20260810,
+  "cpu_oracle": "register_pressure",
+  "cuda_features": [
+    "sm_86"
+  ],
+  "generator_version": "1.0.0",
+  "grid": [
+    1
+  ],
+  "hashes": {
+    "expected": "sha256:1e1961601668d62a9108daf875486008b7334596ae5241f255701ebc938742b2",
+    "input": "sha256:3150519d3ccaef708b904e3b375d004d35a958764e5a4697a679a5ec47d1a09f",
+    "source": "sha256:c7aa42bbd4d17b45f0b548cf2bfc6242521b1373292e168439ba436a556fba73"
+  },
+  "input_word_count": 256,
+  "kernel_entry": "test_kernel",
+  "kernel_seed": 13040233190162129922,
+  "output_word_count": 128,
+  "output_words_per_thread": 2,
+  "reject_reason": "",
+  "sanitizer_policy": "none",
+  "strategy": "register_pressure",
+  "strategy_params": {
+    "call_style": "noinline",
+    "chains": 6,
+    "live_vars": 96,
+    "merge_len": 96,
+    "ptxas_extra": [
+      "--maxrregcount=40"
+    ],
+    "variant": "maxrregcount"
+  },
+  "target_sm": "sm_86",
+  "test_id": "register_pressure__13527ca__c0fff0",
+  "test_seed": 12648432,
+  "valid": true
+}

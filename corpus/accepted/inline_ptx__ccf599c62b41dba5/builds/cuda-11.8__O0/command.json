@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "/usr/local/cuda-11.8/bin/ptxas",
+    "-arch=sm_86",
+    "-O0",
+    "-v",
+    "-o",
+    "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ccf599c62b41dba5/builds/cuda-11.8__O0/kernel.cubin",
+    "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ccf599c62b41dba5/builds/cuda-11.8__O0/kernel.ptx"
+  ],
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function 'test_kernel' for 'sm_86'\nptxas info    : Function properties for test_kernel\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 31 registers, 384 bytes cmem[0]\n",
+  "elapsed_s": 0.09,
+  "ok": true
+}

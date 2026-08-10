@@ -1,0 +1,41 @@
+{
+  "block": [
+    64
+  ],
+  "case_id": "predicate_pressure__2ccdc2a5f8261c0a",
+  "comparison_policy": "exact_u64",
+  "config_seed": 20260810,
+  "cpu_oracle": "predicate_pressure",
+  "cuda_features": [
+    "sm_86"
+  ],
+  "generator_version": "1.0.0",
+  "grid": [
+    1
+  ],
+  "hashes": {
+    "expected": "sha256:4ab65ba360013c24d6703bc0fe7d04649a509dd303568b7d3ce62798e4e82689",
+    "input": "sha256:086e3f149473a70475896463bb783c55a6c4ef8551c19e759e236bbb99504921",
+    "source": "sha256:1a824d59ebf9d1829b8fb0d66f24c632c2c4228dccbb36f003cb6664d375c69c"
+  },
+  "input_word_count": 256,
+  "kernel_entry": "test_kernel",
+  "kernel_seed": 1685754268860154481,
+  "output_word_count": 128,
+  "output_words_per_thread": 2,
+  "reject_reason": "",
+  "sanitizer_policy": "none",
+  "strategy": "predicate_pressure",
+  "strategy_params": {
+    "chain_len": 96,
+    "dup_groups": 5,
+    "num_comparisons": 48,
+    "num_diamonds": 16,
+    "num_folds": 36,
+    "use_launch_bounds": true
+  },
+  "target_sm": "sm_86",
+  "test_id": "predicate_pressure__13527ca__c0fff5",
+  "test_seed": 12648437,
+  "valid": true
+}

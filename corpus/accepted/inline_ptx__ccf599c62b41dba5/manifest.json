@@ -1,0 +1,42 @@
+{
+  "block": [
+    64
+  ],
+  "case_id": "inline_ptx__ccf599c62b41dba5",
+  "comparison_policy": "exact_u64",
+  "config_seed": 20260810,
+  "cpu_oracle": "inline_ptx",
+  "cuda_features": [
+    "sm_86",
+    "inline_ptx"
+  ],
+  "generator_version": "1.0.0",
+  "grid": [
+    1
+  ],
+  "hashes": {
+    "expected": "sha256:228ac1865d099d7dc86f0138c7025d7adb9d0799ecccf706a0794b328fcd5d3c",
+    "input": "sha256:5d9ffea4e9a907d8cfcc17985987d4d072dd2a9d4c83a7035d7b2be74315b4b9",
+    "source": "sha256:845d96553149fff6a600dbc6f04e6e87ffb4fee8b47f1cd2b9b50c97b018afd0"
+  },
+  "input_word_count": 256,
+  "kernel_entry": "test_kernel",
+  "kernel_seed": 3970868306842774015,
+  "output_word_count": 128,
+  "output_words_per_thread": 2,
+  "reject_reason": "",
+  "sanitizer_policy": "none",
+  "strategy": "inline_ptx",
+  "strategy_params": {
+    "n_instr": 120,
+    "n_preds": 5,
+    "n_regs32": 12,
+    "n_regs64": 6,
+    "use_immediates": true,
+    "use_rare_ops": true
+  },
+  "target_sm": "sm_86",
+  "test_id": "inline_ptx__13527ca__270f",
+  "test_seed": 9999,
+  "valid": true
+}

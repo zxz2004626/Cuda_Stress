@@ -1,0 +1,43 @@
+{
+  "block": [
+    64
+  ],
+  "case_id": "integer_chain__4cbae2beba9dc2d6",
+  "comparison_policy": "exact_u64",
+  "config_seed": 20260810,
+  "cpu_oracle": "integer_chain",
+  "cuda_features": [
+    "sm_86",
+    "sm_80_intrinsics"
+  ],
+  "generator_version": "1.0.0",
+  "grid": [
+    1
+  ],
+  "hashes": {
+    "expected": "sha256:2d1348b42701fe702398637d577fda8455525b4aea1f8291971701d1aad31a84",
+    "input": "sha256:602d8c6bc900b5d92b40eb8d93183caf57db8190173bded4569ff85c58360669",
+    "source": "sha256:d61f4f2e20f171737b7d50507089a529d4bc7b358f57945ee55b076aada54d58"
+  },
+  "input_word_count": 256,
+  "kernel_entry": "test_kernel",
+  "kernel_seed": 14081415955145184205,
+  "output_word_count": 128,
+  "output_words_per_thread": 2,
+  "reject_reason": "",
+  "sanitizer_policy": "none",
+  "strategy": "integer_chain",
+  "strategy_params": {
+    "boundary_words": 8,
+    "chain_len": 160,
+    "use_bfe_bfi": true,
+    "use_funnelshift": true,
+    "use_lop3": true,
+    "use_mulhi": true,
+    "use_prmt": true
+  },
+  "target_sm": "sm_86",
+  "test_id": "integer_chain__13527ca__c0fff6",
+  "test_seed": 12648438,
+  "valid": true
+}

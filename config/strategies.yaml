@@ -1,0 +1,64 @@
+# Per-strategy generation parameters.  `generate --strategy X --variants N` draws N param
+# sets; each set plus (config_seed, test_seed) fully determines the testcase (pure function).
+
+defaults:
+  input_words: 256            # u64 words in input.bin
+  block: [64]                 # blockDim
+  grid: [1]                   # gridDim
+  output_words_per_thread: 2  # u64 outputs per thread
+  generator_version: "1.0.0"
+
+strategies:
+  predicate_pressure:
+    enabled: true
+    weight: 1.0
+    variants:
+      - { num_comparisons: 32, chain_len: 48, num_diamonds: 12, num_folds: 24, dup_groups: 4, use_launch_bounds: false }
+      - { num_comparisons: 64, chain_len: 96, num_diamonds: 24, num_folds: 48, dup_groups: 6, use_launch_bounds: false }
+      - { num_comparisons: 96, chain_len: 160, num_diamonds: 36, num_folds: 72, dup_groups: 8, use_launch_bounds: true }
+      - { num_comparisons: 48, chain_len: 64, num_diamonds: 16, num_folds: 36, dup_groups: 5, use_launch_bounds: true }
+
+  integer_chain:
+    enabled: true
+    weight: 1.0
+    variants:
+      - { chain_len: 200, use_mulhi: true, use_funnelshift: true, use_bfe_bfi: true, use_prmt: true, use_lop3: true, boundary_words: 8 }
+      - { chain_len: 400, use_mulhi: true, use_funnelshift: true, use_bfe_bfi: true, use_prmt: false, use_lop3: true, boundary_words: 8 }
+      - { chain_len: 800, use_mulhi: false, use_funnelshift: true, use_bfe_bfi: true, use_prmt: true, use_lop3: false, boundary_words: 4 }
+      - { chain_len: 1200, use_mulhi: true, use_funnelshift: false, use_bfe_bfi: false, use_prmt: false, use_lop3: true, boundary_words: 16 }
+
+  memory_address:
+    enabled: true
+    weight: 0.8
+    variants:
+      - { reads: 32, widths: [8, 32, 64], vectors: true, cache_policy: default, structs: true }
+      - { reads: 64, widths: [8, 16, 64], vectors: false, cache_policy: ca, structs: true }
+      - { reads: 96, widths: [16, 32, 64], vectors: true, cache_policy: cg, structs: false }
+      - { reads: 128, widths: [8, 16, 32, 64], vectors: true, cache_policy: cs, structs: true }
+
+  warp_mixed:
+    enabled: true
+    weight: 0.8
+    variants:
+      - { warp_ops: [ballot, shfl_idx, any], chain_len: 96, partial_masks: false, boundary_words: 8 }
+      - { warp_ops: [ballot, all, shfl_xor], chain_len: 160, partial_masks: true, boundary_words: 8 }
+      - { warp_ops: [match_any, shfl_up, shfl_down], chain_len: 64, partial_masks: true, boundary_words: 8 }
+      - { warp_ops: [ballot, match_all, shfl_idx, activemask], chain_len: 200, partial_masks: false, boundary_words: 8 }
+
+  register_pressure:
+    enabled: true
+    weight: 0.9
+    variants:
+      - { live_vars: 32, chains: 4, merge_len: 32, call_style: noinline, variant: none }
+      - { live_vars: 64, chains: 4, merge_len: 64, call_style: inline, variant: launch_bounds }
+      - { live_vars: 96, chains: 6, merge_len: 96, call_style: noinline, variant: maxrregcount }
+      - { live_vars: 128, chains: 8, merge_len: 128, call_style: inline, variant: none }
+
+  inline_ptx:
+    enabled: true
+    weight: 0.9
+    variants:
+      - { n_instr: 60,  n_regs32: 10, n_regs64: 6, n_preds: 4, use_rare_ops: true,  use_immediates: true }
+      - { n_instr: 120, n_regs32: 12, n_regs64: 6, n_preds: 5, use_rare_ops: true,  use_immediates: true }
+      - { n_instr: 180, n_regs32: 16, n_regs64: 8, n_preds: 6, use_rare_ops: true,  use_immediates: false }
+      - { n_instr: 90,  n_regs32: 14, n_regs64: 5, n_preds: 4, use_rare_ops: false, use_immediates: true }
