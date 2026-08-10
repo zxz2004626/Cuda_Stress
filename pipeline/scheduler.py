@@ -176,7 +176,8 @@ class LoopScheduler:
         try:
             case = self.registry.get(strategy_name).generate(
                 config_seed=self.config_seed, test_seed=test_seed, params=params,
-                gen_version="1.0.0", target_sm="sm_86")
+                gen_version=str(self.cfg.generation.get("generator_version", "1.0.0")),
+                target_sm="sm_86")
         except Exception:  # noqa: BLE001
             return None
         if not case.valid:

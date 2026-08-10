@@ -116,7 +116,7 @@ params)`** — regenerate it byte-for-byte with `reproduce`.
 | `memory_address`    | u8/u16/u32/u64 + vector loads, `ld.global` cache operators (default/ca/cg/cs), multi-level runtime addressing, struct indexing, local-array spill pressure |
 | `warp_mixed`        | `__ballot`/`__any`/`__all`/`__activemask`/`__shfl*`/`__match_any`/`__match_all`, full and legal partial member masks (width-16 segments), then a long chain + store |
 | `register_pressure` | 32–128 simultaneously-live u64 values across `__noinline__`/`__forceinline__` chains, merge + reuse, `launch_bounds`/`maxrregcount` variants |
-| `inline_ptx`        | a **randomly generated inline-PTX block** (`asm volatile`) from an empirically-verified PTX instruction set: rare ops (prmt/shf.r/bfe/bfi/lop3/sad/mul.hi/popc/clz/brev), predicates, 32/64-bit mixing, long chains.  Every instruction is folded into a running accumulator so ptxas cannot dead-code it at any `-O`; register/instruction counts are parameterized (`n_instr`/`n_regs32`/`n_regs64`/`n_preds`) |
+| `inline_ptx`        | an ISA-constrained inline-PTX block (`asm volatile`) with 140+ CPU-mirrored type/modifier variants across scalar integer, bit manipulation, logic, shifts, comparisons and selection. `balanced` mode guarantees each eligible variant before repetition; `random` mode explores stochastic cross-family chains. PTX-version/SM gates, boundary immediates, 32/64-bit mixing and accumulator folds keep cases valid and optimization-relevant |
 
 Every strategy has an **independent CPU oracle** (`cpu_oracle`) that mirrors the CUDA
 semantics exactly (mod-2^64 arithmetic, PTX bit ops, warp lane/member-mask rules, byte
@@ -128,20 +128,45 @@ are rejected with a reason.
 
 nvcc inline-asm substitutes `%N` operands and owns `%r/%rd/%p` register names, so the
 generator emits internal PTX registers through the `%%xr`/`%%xd`/`%%xp` escape (literal
-`%`), and every shift count is pre-masked into a legal range (PTX requires `.b32` count
-registers for `.b64` shifts).  All op semantics in the table were empirically verified
-against their Python mirrors on a real GPU.  Two real bugs were found and fixed during
-validation: PTX `bfe/bfi` require `pos+wid <= 32` (the generator once allowed 33, which is
-undefined behaviour that ptxas `-O1+` exploits while `-O0` does not), and `prmt`'s selector
-must be emitted with a `0x` prefix (a bare hex literal parses as decimal).
+`%`). PTX requires a 32-bit count operand even for 64-bit `shl`/`shr`; counts greater
+than the register width are **clamped to the width**, not wrapped. The generator now
+samples `0`, `N-1`, `N`, `N+1`, and `255` without pre-masking. Funnel-shift `.wrap`
+continues to wrap as specified, while `.clamp` samples its distinct boundary behavior.
+All op semantics in the table are checked against Python mirrors and exercised by GPU
+O0/O3 smoke cases. One real generation bug was found and fixed:
+`prmt`'s selector must be emitted with a `0x` prefix (a bare hex literal parses as
+decimal). Generic `prmt` selectors now use the full nibble range `0..15`; selector bit 3
+requests byte-sign replication and was previously over-constrained away. PTX `bfe/bfi`
+take position/length in `[0,255]` and a field extending past the
+register MSB is **well-defined** (zero-extended for `bfe`, the excess bits simply dropped
+for `bfi`) — there is no `pos+wid <= width` constraint; the generator samples that full
+over-MSB region.
 
-During the final sweep one generated program (120 instructions, a specific seed) was
-correct on `-O0` on all runnable toolchains but differed on `-O1/-O2/-O3` on cuda-11.8 /
-12.1 / 12.6 (cuda-11.3 stayed correct).  The pipeline flags exactly this class of case as
-**POTENTIAL_COMPILER_BUG** and archives it under `runs/<id>/differentials/<case_id>/` with a
-`reproduce.sh`.  Whether it is a ptxas scheduling bug or a subtle latent UB is left to
-investigation; the oracle was validated against the unoptimized build, and each op
-individually at `-O3`.
+Each operation records its minimum PTX ISA and SM requirement. The default comparison
+profile is PTX 7.3 because CUDA 11.3 is the oldest configured toolkit; PTX 7.6+ operations
+such as `bmsk`/`szext` are available only when `max_ptx_isa` is raised explicitly. Run
+`python3 tools/audit_ptx_coverage.py` to compare deliberate generator coverage with the
+saved PTX ISA 9.3 instruction index. Family coverage is intentionally reported separately
+from type/modifier variants: memory, texture, tensor-core, async-copy and synchronization
+families require dedicated stateful oracles and are not falsely counted as scalar coverage.
+
+With the bfe/bfi generator sampling the full legal over-MSB range, a sweep over 40
+configurations found **4 programs** that are correct on `-O0` on all runnable toolchains
+but produce deterministic, different output on `-O1/-O2/-O3` on cuda-11.8 / 12.1 / 12.6
+(cuda-11.3 stays correct).  Two distinct trigger classes were isolated:
+  * `prmt.b32(d, a, a, sel)` (test_seed 9999, case `inline_ptx__ccf599c62b41dba5`),
+  * **over-MSB `bfe/bfi` fields** (pos+wid > 32; test_seed 777, case
+    `inline_ptx__ebf45243624dc5d6`, plus the 180-instruction variants of test_seeds
+    77 / 99).
+
+Both are real ptxas O1+ miscompilations on fully valid PTX: two independent CPU oracles
+agree; the exact `nvcc -ptx` output fed directly to `ptxas -O0` vs `-O1` reproduces; a
+runtime legality audit finds no UB; the culprit instruction is correct in isolation but
+mis-optimized inside the large inline-asm block.  The pipeline flags this class as
+**POTENTIAL_COMPILER_BUG** and archives it under `runs/<id>/differentials/<case_id>/`
+with a `reproduce.sh`.  Note that the first of these was initially (wrongly) attributed
+to 'bfe/bfi pos+wid>32 being UB'; PTX defines those cases, and widening the generator to
+the legal range is what surfaced the additional bugs.
 
 ## Pipeline modules
 

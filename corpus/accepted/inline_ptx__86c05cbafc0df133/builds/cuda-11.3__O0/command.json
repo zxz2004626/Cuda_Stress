@@ -11,6 +11,6 @@
   "returncode": 0,
   "stdout": "",
   "stderr": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function 'test_kernel' for 'sm_86'\nptxas info    : Function properties for test_kernel\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 25 registers, 384 bytes cmem[0]\n",
-  "elapsed_s": 0.027,
+  "elapsed_s": 0.053,
   "ok": true
 }

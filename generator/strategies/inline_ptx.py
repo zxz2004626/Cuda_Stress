@@ -31,6 +31,136 @@ M32 = 0xFFFFFFFF
 M64 = 0xFFFFFFFFFFFFFFFF
 
 
+def _signed(value: int, bits: int) -> int:
+    """Interpret the low *bits* of value as a two's-complement integer."""
+    value &= (1 << bits) - 1
+    sign = 1 << (bits - 1)
+    return value - (1 << bits) if value & sign else value
+
+
+def _shl(value: int, count: int, bits: int) -> int:
+    """PTX shl: counts greater than the register width clamp to the width."""
+    count = min(count & M32, bits)
+    return (value << count) & ((1 << bits) - 1)
+
+
+def _shr(value: int, count: int, bits: int, signed: bool = False) -> int:
+    """PTX shr: clamp the u32 count, then zero-fill or sign-fill."""
+    count = min(count & M32, bits)
+    mask = (1 << bits) - 1
+    source = _signed(value, bits) if signed else value & mask
+    return (source >> count) & mask
+
+
+def _bfe(value: int, pos: int, length: int, bits: int, signed: bool) -> int:
+    """PTX bfe semantics, including zero length and fields crossing the MSB."""
+    pos &= 0xFF
+    length &= 0xFF
+    mask = (1 << bits) - 1
+    if not signed or length == 0:
+        sign_bit = 0
+    else:
+        sign_at = min(pos + length - 1, bits - 1)
+        sign_bit = (value >> sign_at) & 1
+    result = 0
+    for i in range(bits):
+        bit = ((value >> (pos + i)) & 1) if i < length and pos + i < bits else sign_bit
+        result |= bit << i
+    return result & mask
+
+
+def _bfi_bits(a: int, b: int, pos: int, length: int, bits: int) -> int:
+    """PTX bfi semantics: excess inserted bits are dropped, never wrapped."""
+    pos &= 0xFF
+    length &= 0xFF
+    mask = (1 << bits) - 1
+    result = b & mask
+    for i in range(length):
+        if pos + i >= bits:
+            break
+        result = (result & ~(1 << (pos + i))) | (((a >> i) & 1) << (pos + i))
+    return result & mask
+
+
+def _bmsk(pos: int, width: int, mode: str) -> int:
+    """PTX bmsk.{clamp,wrap}.b32 semantics from ISA 9.3 section 9.7.1.23."""
+    pos &= M32
+    width &= M32
+    if mode == "clamp":
+        if pos >= 32 or width == 0:
+            return 0
+        width = min(width, 32)
+        return (((1 << width) - 1) << pos) & M32
+    pos &= 31
+    width &= 31
+    if width == 0:
+        return 0
+    return (((1 << width) - 1) << pos) & M32
+
+
+def _bfind(value: int, bits: int, signed: bool, shiftamt: bool) -> int:
+    value &= (1 << bits) - 1
+    if signed and value & (1 << (bits - 1)):
+        value = (~value) & ((1 << bits) - 1)
+    if value == 0:
+        return M32
+    found = value.bit_length() - 1
+    return bits - 1 - found if shiftamt else found
+
+
+def _fns(mask: int, base: int, offset: int) -> int:
+    """PTX fns.b32; callers constrain base to the documented 0..31 range."""
+    base &= M32
+    offset = _signed(offset, 32)
+    if offset == 0:
+        return base if (mask >> base) & 1 else M32
+    pos = base
+    count = abs(offset) - 1
+    increment = 1 if offset > 0 else -1
+    while 0 <= pos < 32:
+        if (mask >> pos) & 1:
+            if count == 0:
+                return pos
+            count -= 1
+        pos += increment
+    return M32
+
+
+def _shf(a: int, b: int, count: int, direction: str, mode: str) -> int:
+    n = min(count & M32, 32) if mode == "clamp" else count & 31
+    pair = ((b & M32) << 32) | (a & M32)
+    if direction == "r":
+        return (pair >> n) & M32
+    return ((pair << n) >> 32) & M32
+
+
+def _narrow24(value: int, signed: bool) -> int:
+    value &= 0xFFFFFF
+    return value - (1 << 24) if signed and value & 0x800000 else value
+
+
+def _mul24(a: int, b: int, signed: bool, high: bool) -> int:
+    product = _narrow24(a, signed) * _narrow24(b, signed)
+    return ((product >> 16) if high else product) & M32
+
+
+def _trunc_div(a: int, b: int) -> int:
+    """Integer division rounded toward zero without converting through float."""
+    quotient = abs(a) // abs(b)
+    return -quotient if (a < 0) != (b < 0) else quotient
+
+
+def _szext(value: int, count: int, signed: bool, mode: str) -> int:
+    count &= M32
+    if mode == "clamp" and count >= 32:
+        return value & M32
+    count &= 31
+    if count == 0:
+        return 0
+    low = value & ((1 << count) - 1)
+    return _signed(low, count) & M32 if signed else low
+
+
 # ---------------------------------------------------------------------------
 # Verified PTX instruction table.
 # Each op knows how to emit itself and how to evaluate itself.
@@ -44,9 +174,10 @@ def _imm64(x: int) -> str:
 
 def _op(name: str, dst: str, srcs: List[str], imm: Optional[str],
         emit: Callable[[List[str], int], str],
-        mirror: Callable[[List[int], int], int]) -> Dict[str, Any]:
+        mirror: Callable[[List[int], int], int], *,
+        min_ptx: Tuple[int, int] = (1, 0), min_sm: int = 10) -> Dict[str, Any]:
     return {"name": name, "dst": dst, "srcs": srcs, "imm": imm,
-            "emit": emit, "mirror": mirror}
+            "emit": emit, "mirror": mirror, "min_ptx": min_ptx, "min_sm": min_sm}
 
 
 def _build_op_table() -> List[Dict[str, Any]]:
@@ -60,6 +191,31 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("mul.hi.u32", "r32", ["r32", "r32"], None,
                  lambda d, s: f"mul.hi.u32 {d}, {s[0]}, {s[1]};",
                  lambda v: ((v[0] * v[1]) >> 32) & M32))
+    O.append(_op("mad.lo.u32", "r32", ["r32", "r32", "r32"], None,
+                 lambda d, s: f"mad.lo.u32 {d}, {s[0]}, {s[1]}, {s[2]};",
+                 lambda v: (v[0] * v[1] + v[2]) & M32))
+    for signed in (False, True):
+        typ = "s32" if signed else "u32"
+        for high in (False, True):
+            mode = "hi" if high else "lo"
+            name = f"mul24.{mode}.{typ}"
+            O.append(_op(name, "r32", ["r32", "r32"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                         lambda v, sg=signed, hi=high: _mul24(v[0], v[1], sg, hi)))
+            name = f"mad24.{mode}.{typ}"
+            O.append(_op(name, "r32", ["r32", "r32", "r32"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]}, {s[2]};",
+                         lambda v, sg=signed, hi=high: (_mul24(v[0], v[1], sg, hi) + v[2]) & M32))
+    O.append(_op("div.u32_i", "r32", ["r32"], "divisor32",
+                 lambda d, s, i: f"div.u32 {d}, {s[0]}, {i};",
+                 lambda v, i: (v[0] & M32) // i))
+    O.append(_op("rem.u32_i", "r32", ["r32"], "divisor32",
+                 lambda d, s, i: f"rem.u32 {d}, {s[0]}, {i};",
+                 lambda v, i: (v[0] & M32) % i))
+    for name in ("min.s32", "max.s32"):
+        O.append(_op(name, "r32", ["r32", "r32"], None,
+                     lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                     lambda v, n=name: (_signed_minmax(v, 32, n))))
     # ---- b32 unary --------------------------------------------------------------
     O.append(_op("popc.b32", "r32", ["r32"], None,
                  lambda d, s: f"popc.b32 {d}, {s[0]};",
@@ -70,26 +226,64 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("brev.b32", "r32", ["r32"], None,
                  lambda d, s: f"brev.b32 {d}, {s[0]};",
                  lambda v: int(f"{v[0] & M32:032b}"[::-1], 2)))
-    # ---- b32 shifts: register count MUST be pre-masked by the generator ---------
+    O.append(_op("abs.s32", "r32", ["r32"], None,
+                 lambda d, s: f"abs.s32 {d}, {s[0]};",
+                 lambda v: abs(_signed(v[0], 32)) & M32))
+    O.append(_op("neg.s32", "r32", ["r32"], None,
+                 lambda d, s: f"neg.s32 {d}, {s[0]};",
+                 lambda v: (-_signed(v[0], 32)) & M32))
+    O.append(_op("not.b32", "r32", ["r32"], None,
+                 lambda d, s: f"not.b32 {d}, {s[0]};",
+                 lambda v: (~v[0]) & M32))
+    O.append(_op("cnot.b32", "r32", ["r32"], None,
+                 lambda d, s: f"cnot.b32 {d}, {s[0]};",
+                 lambda v: 1 if (v[0] & M32) == 0 else 0))
+    # ---- b32 shifts: PTX clamps counts to 32; the count operand is always u32. ---
     O.append(_op("shl.b32", "r32", ["r32", "r32"], "shift32",
                  lambda d, s: f"shl.b32 {d}, {s[0]}, {s[1]};",
-                 lambda v: (v[0] << (v[1] & 31)) & M32))
+                 lambda v: _shl(v[0], v[1], 32)))
     O.append(_op("shr.u32", "r32", ["r32", "r32"], "shift32",
                  lambda d, s: f"shr.u32 {d}, {s[0]}, {s[1]};",
-                 lambda v: (v[0] >> (v[1] & 31)) & M32))
-    O.append(_op("shl.b32_i", "r32", ["r32"], "imm5",
-                 lambda d, s, i: f"shl.b32 {d}, {s[0]}, {i & 31};",
-                 lambda v, i: (v[0] << (i & 31)) & M32))
-    O.append(_op("shr.u32_i", "r32", ["r32"], "imm5",
-                 lambda d, s, i: f"shr.u32 {d}, {s[0]}, {i & 31};",
-                 lambda v, i: (v[0] >> (i & 31)) & M32))
+                 lambda v: _shr(v[0], v[1], 32)))
+    O.append(_op("shr.s32", "r32", ["r32", "r32"], "shift32",
+                 lambda d, s: f"shr.s32 {d}, {s[0]}, {s[1]};",
+                 lambda v: _shr(v[0], v[1], 32, signed=True)))
+    O.append(_op("shl.b32_i", "r32", ["r32"], "shift32_imm",
+                 lambda d, s, i: f"shl.b32 {d}, {s[0]}, {i};",
+                 lambda v, i: _shl(v[0], i, 32)))
+    O.append(_op("shr.u32_i", "r32", ["r32"], "shift32_imm",
+                 lambda d, s, i: f"shr.u32 {d}, {s[0]}, {i};",
+                 lambda v, i: _shr(v[0], i, 32)))
+    O.append(_op("shr.s32_i", "r32", ["r32"], "shift32_imm",
+                 lambda d, s, i: f"shr.s32 {d}, {s[0]}, {i};",
+                 lambda v, i: _shr(v[0], i, 32, signed=True)))
     # ---- b32 rare / special ------------------------------------------------------
     O.append(_op("bfe.u32", "r32", ["r32"], "bfe",
                  lambda d, s, i: f"bfe.u32 {d}, {s[0]}, {i[0]}, {i[1]};",
-                 lambda v, i: (v[0] >> i[0]) & ((1 << i[1]) - 1)))
+                 lambda v, i: _bfe(v[0], i[0], i[1], 32, False)))
+    O.append(_op("bfe.s32", "r32", ["r32"], "bfe",
+                 lambda d, s, i: f"bfe.s32 {d}, {s[0]}, {i[0]}, {i[1]};",
+                 lambda v, i: _bfe(v[0], i[0], i[1], 32, True)))
     O.append(_op("bfi.b32", "r32", ["r32", "r32"], "bfi",
                  lambda d, s, i: f"bfi.b32 {d}, {s[0]}, {s[1]}, {i[0]}, {i[1]};",
-                 lambda v, i: _bfi(v[0], v[1], i[0], i[1])))
+                 lambda v, i: _bfi_bits(v[0], v[1], i[0], i[1], 32)))
+    for mode in ("clamp", "wrap"):
+        name = f"bmsk.{mode}.b32"
+        O.append(_op(name, "r32", [], "bmsk",
+                     lambda d, s, i, n=name: f"{n} {d}, {i[0]}, {i[1]};",
+                     lambda v, i, m=mode: _bmsk(i[0], i[1], m),
+                     min_ptx=(7, 6), min_sm=70))
+    for signed in (False, True):
+        typ = "s32" if signed else "u32"
+        for shiftamt in (False, True):
+            suffix = ".shiftamt" if shiftamt else ""
+            name = f"bfind{suffix}.{typ}"
+            O.append(_op(name, "r32", ["r32"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]};",
+                         lambda v, sg=signed, sh=shiftamt: _bfind(v[0], 32, sg, sh)))
+    O.append(_op("fns.b32", "r32", ["r32"], "fns",
+                 lambda d, s, i: f"fns.b32 {d}, {s[0]}, {i[0]}, {i[1]};",
+                 lambda v, i: _fns(v[0], i[0], i[1]), min_ptx=(6, 0), min_sm=30))
     O.append(_op("prmt.b32", "r32", ["r32", "r32"], "prmt",
                  lambda d, s, i: f"prmt.b32 {d}, {s[0]}, {s[1]}, 0x{i:04x};",
                  lambda v, i: _prmt(v[0], v[1], i)))
@@ -99,12 +293,34 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("sad.u32", "r32", ["r32", "r32", "r32"], None,
                  lambda d, s: f"sad.u32 {d}, {s[0]}, {s[1]}, {s[2]};",
                  lambda v: (v[2] + (v[0] - v[1] if v[0] >= v[1] else v[1] - v[0])) & M32))
-    O.append(_op("shf.r.wrap.b32", "r32", ["r32", "r32"], "imm5",
-                 lambda d, s, i: f"shf.r.wrap.b32 {d}, {s[0]}, {s[1]}, {i & 31};",
-                 lambda v, i: ((v[0] | (v[1] << 32)) >> (i & 31)) & M32))
+    for direction in ("l", "r"):
+        for mode in ("clamp", "wrap"):
+            name = f"shf.{direction}.{mode}.b32"
+            O.append(_op(name, "r32", ["r32", "r32"], "shf_count",
+                         lambda d, s, i, n=name: f"{n} {d}, {s[0]}, {s[1]}, {i};",
+                         lambda v, i, dr=direction, md=mode: _shf(v[0], v[1], i, dr, md),
+                         min_ptx=(3, 1), min_sm=32))
     O.append(_op("selp.b32", "r32", ["r32", "r32", "pred"], None,
                  lambda d, s: f"selp.b32 {d}, {s[0]}, {s[1]}, {s[2]};",
                  lambda v: v[0] if v[2] else v[1]))
+    O.append(_op("slct.b32.s32", "r32", ["r32", "r32", "r32"], None,
+                 lambda d, s: f"slct.b32.s32 {d}, {s[0]}, {s[1]}, {s[2]};",
+                 lambda v: v[0] if _signed(v[2], 32) >= 0 else v[1]))
+    for signed in (False, True):
+        typ = "s32" if signed else "u32"
+        for cmp in ("eq", "ne", "lt", "le", "gt", "ge"):
+            name = f"set.{cmp}.u32.{typ}"
+            O.append(_op(name, "r32", ["r32", "r32"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                         lambda v, c=cmp, sg=signed: M32 if _cmp_typed(v[0], v[1], c, 32, sg) else 0))
+    for mode in ("clamp", "wrap"):
+        for signed in (False, True):
+            typ = "s32" if signed else "u32"
+            name = f"szext.{mode}.{typ}"
+            O.append(_op(name, "r32", ["r32"], "szext_count",
+                         lambda d, s, i, n=name: f"{n} {d}, {s[0]}, {i};",
+                         lambda v, i, sg=signed, md=mode: _szext(v[0], i, sg, md),
+                         min_ptx=(7, 6), min_sm=70))
     # ---- b64 binary ---------------------------------------------------------------
     for name in ("add.u64", "sub.u64", "mul.lo.u64", "and.b64", "or.b64", "xor.b64",
                  "min.u64", "max.u64"):
@@ -114,18 +330,44 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("mul.hi.u64", "r64", ["r64", "r64"], None,
                  lambda d, s: f"mul.hi.u64 {d}, {s[0]}, {s[1]};",
                  lambda v: (v[0] * v[1]) >> 64))
-    O.append(_op("shl.b64", "r64", ["r64", "r64"], "shift64",
+    O.append(_op("mad.lo.u64", "r64", ["r64", "r64", "r64"], None,
+                 lambda d, s: f"mad.lo.u64 {d}, {s[0]}, {s[1]}, {s[2]};",
+                 lambda v: (v[0] * v[1] + v[2]) & M64))
+    O.append(_op("div.u64_i", "r64", ["r64"], "divisor64",
+                 lambda d, s, i: f"div.u64 {d}, {s[0]}, {i};",
+                 lambda v, i: (v[0] & M64) // i))
+    O.append(_op("rem.u64_i", "r64", ["r64"], "divisor64",
+                 lambda d, s, i: f"rem.u64 {d}, {s[0]}, {i};",
+                 lambda v, i: (v[0] & M64) % i))
+    O.append(_op("mul.wide.u32", "r64", ["r32", "r32"], None,
+                 lambda d, s: f"mul.wide.u32 {d}, {s[0]}, {s[1]};",
+                 lambda v: (v[0] & M32) * (v[1] & M32)))
+    O.append(_op("mul.wide.s32", "r64", ["r32", "r32"], None,
+                 lambda d, s: f"mul.wide.s32 {d}, {s[0]}, {s[1]};",
+                 lambda v: (_signed(v[0], 32) * _signed(v[1], 32)) & M64))
+    for name in ("min.s64", "max.s64"):
+        O.append(_op(name, "r64", ["r64", "r64"], None,
+                     lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                     lambda v, n=name: _signed_minmax(v, 64, n)))
+    # The PTX count operand is u32 even for a 64-bit destination/source.
+    O.append(_op("shl.b64", "r64", ["r64", "r32"], "shift64",
                  lambda d, s: f"shl.b64 {d}, {s[0]}, {s[1]};",
-                 lambda v: (v[0] << (v[1] & 63)) & M64))
-    O.append(_op("shr.u64", "r64", ["r64", "r64"], "shift64",
+                 lambda v: _shl(v[0], v[1], 64)))
+    O.append(_op("shr.u64", "r64", ["r64", "r32"], "shift64",
                  lambda d, s: f"shr.u64 {d}, {s[0]}, {s[1]};",
-                 lambda v: (v[0] >> (v[1] & 63)) & M64))
-    O.append(_op("shl.b64_i", "r64", ["r64"], "imm6",
-                 lambda d, s, i: f"shl.b64 {d}, {s[0]}, {i & 63};",
-                 lambda v, i: (v[0] << (i & 63)) & M64))
-    O.append(_op("shr.u64_i", "r64", ["r64"], "imm6",
-                 lambda d, s, i: f"shr.u64 {d}, {s[0]}, {i & 63};",
-                 lambda v, i: (v[0] >> (i & 63)) & M64))
+                 lambda v: _shr(v[0], v[1], 64)))
+    O.append(_op("shr.s64", "r64", ["r64", "r32"], "shift64",
+                 lambda d, s: f"shr.s64 {d}, {s[0]}, {s[1]};",
+                 lambda v: _shr(v[0], v[1], 64, signed=True)))
+    O.append(_op("shl.b64_i", "r64", ["r64"], "shift64_imm",
+                 lambda d, s, i: f"shl.b64 {d}, {s[0]}, {i};",
+                 lambda v, i: _shl(v[0], i, 64)))
+    O.append(_op("shr.u64_i", "r64", ["r64"], "shift64_imm",
+                 lambda d, s, i: f"shr.u64 {d}, {s[0]}, {i};",
+                 lambda v, i: _shr(v[0], i, 64)))
+    O.append(_op("shr.s64_i", "r64", ["r64"], "shift64_imm",
+                 lambda d, s, i: f"shr.s64 {d}, {s[0]}, {i};",
+                 lambda v, i: _shr(v[0], i, 64, signed=True)))
     # ---- b64 unary / cvt ----------------------------------------------------------
     O.append(_op("popc.b64", "r32", ["r64"], None,
                  lambda d, s: f"popc.b64 {d}, {s[0]};",
@@ -136,28 +378,69 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("brev.b64", "r64", ["r64"], None,
                  lambda d, s: f"brev.b64 {d}, {s[0]};",
                  lambda v: int(f"{v[0] & M64:064b}"[::-1], 2)))
+    O.append(_op("abs.s64", "r64", ["r64"], None,
+                 lambda d, s: f"abs.s64 {d}, {s[0]};",
+                 lambda v: abs(_signed(v[0], 64)) & M64))
+    O.append(_op("neg.s64", "r64", ["r64"], None,
+                 lambda d, s: f"neg.s64 {d}, {s[0]};",
+                 lambda v: (-_signed(v[0], 64)) & M64))
+    O.append(_op("not.b64", "r64", ["r64"], None,
+                 lambda d, s: f"not.b64 {d}, {s[0]};",
+                 lambda v: (~v[0]) & M64))
+    O.append(_op("cnot.b64", "r64", ["r64"], None,
+                 lambda d, s: f"cnot.b64 {d}, {s[0]};",
+                 lambda v: 1 if (v[0] & M64) == 0 else 0))
+    O.append(_op("bfe.u64", "r64", ["r64"], "bfe",
+                 lambda d, s, i: f"bfe.u64 {d}, {s[0]}, {i[0]}, {i[1]};",
+                 lambda v, i: _bfe(v[0], i[0], i[1], 64, False)))
+    O.append(_op("bfe.s64", "r64", ["r64"], "bfe",
+                 lambda d, s, i: f"bfe.s64 {d}, {s[0]}, {i[0]}, {i[1]};",
+                 lambda v, i: _bfe(v[0], i[0], i[1], 64, True)))
+    O.append(_op("bfi.b64", "r64", ["r64", "r64"], "bfi",
+                 lambda d, s, i: f"bfi.b64 {d}, {s[0]}, {s[1]}, {i[0]}, {i[1]};",
+                 lambda v, i: _bfi_bits(v[0], v[1], i[0], i[1], 64)))
+    for signed in (False, True):
+        typ = "s64" if signed else "u64"
+        for shiftamt in (False, True):
+            suffix = ".shiftamt" if shiftamt else ""
+            name = f"bfind{suffix}.{typ}"
+            O.append(_op(name, "r32", ["r64"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]};",
+                         lambda v, sg=signed, sh=shiftamt: _bfind(v[0], 64, sg, sh)))
+        for cmp in ("eq", "ne", "lt", "le", "gt", "ge"):
+            name = f"set.{cmp}.u32.{typ}"
+            O.append(_op(name, "r32", ["r64", "r64"], None,
+                         lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                         lambda v, c=cmp, sg=signed: M32 if _cmp_typed(v[0], v[1], c, 64, sg) else 0))
     O.append(_op("cvt.u64.u32", "r64", ["r32"], None,
                  lambda d, s: f"cvt.u64.u32 {d}, {s[0]};",
                  lambda v: v[0] & M64))
     O.append(_op("cvt.u32.u64", "r32", ["r64"], None,
                  lambda d, s: f"cvt.u32.u64 {d}, {s[0]};",
                  lambda v: v[0] & M32))
+    O.append(_op("selp.b64", "r64", ["r64", "r64", "pred"], None,
+                 lambda d, s: f"selp.b64 {d}, {s[0]}, {s[1]}, {s[2]};",
+                 lambda v: v[0] if v[2] else v[1]))
+    O.append(_op("slct.b64.s32", "r64", ["r64", "r64", "r32"], None,
+                 lambda d, s: f"slct.b64.s32 {d}, {s[0]}, {s[1]}, {s[2]};",
+                 lambda v: v[0] if _signed(v[2], 32) >= 0 else v[1]))
     # ---- predicates ---------------------------------------------------------------
-    for name, cmp in (("setp.lt.u32", "lt"), ("setp.gt.u32", "gt"), ("setp.eq.u32", "eq"),
-                      ("setp.ne.u32", "ne"), ("setp.ge.u32", "ge")):
-        O.append(_op(name, "pred", ["r32", "r32"], None,
-                     lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
-                     lambda v, c=cmp: _cmp(v[0], v[1], c)))
-    for name, cmp in (("setp.lt.u64", "lt"), ("setp.gt.u64", "gt"), ("setp.eq.u64", "eq")):
-        O.append(_op(name, "pred", ["r64", "r64"], None,
-                     lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
-                     lambda v, c=cmp: _cmp(v[0], v[1], c)))
+    for bits, kind in ((32, "r32"), (64, "r64")):
+        for typ, signed in ((f"u{bits}", False), (f"s{bits}", True)):
+            for cmp in ("eq", "ne", "lt", "le", "gt", "ge"):
+                name = f"setp.{cmp}.{typ}"
+                O.append(_op(name, "pred", [kind, kind], None,
+                             lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                             lambda v, c=cmp, b=bits, sg=signed: _cmp_typed(v[0], v[1], c, b, sg)))
     O.append(_op("and.pred", "pred", ["pred", "pred"], None,
                  lambda d, s: f"and.pred {d}, {s[0]}, {s[1]};",
                  lambda v: 1 if (v[0] and v[1]) else 0))
     O.append(_op("or.pred", "pred", ["pred", "pred"], None,
                  lambda d, s: f"or.pred {d}, {s[0]}, {s[1]};",
                  lambda v: 1 if (v[0] or v[1]) else 0))
+    O.append(_op("xor.pred", "pred", ["pred", "pred"], None,
+                 lambda d, s: f"xor.pred {d}, {s[0]}, {s[1]};",
+                 lambda v: 1 if bool(v[0]) != bool(v[1]) else 0))
     O.append(_op("not.pred", "pred", ["pred"], None,
                  lambda d, s: f"not.pred {d}, {s[0]};",
                  lambda v: 0 if v[0] else 1))
@@ -174,6 +457,22 @@ def _build_op_table() -> List[Dict[str, Any]]:
     O.append(_op("mov.u64_i", "r64", [], "u64",
                  lambda d, s, i: f"mov.u64 {d}, {_imm64(i)};",
                  lambda v, i: i & M64))
+
+    # Requirements are part of the constraint model, not merely documentation:
+    # _gen_program filters variants against max_ptx_isa and target_sm.
+    requirements = (
+        (("popc.", "clz.", "bfind.", "bfind.shiftamt.", "brev.", "bfe.", "bfi.", "prmt."),
+         (2, 0), 20),
+        (("shf.",), (3, 1), 32),
+        (("lop3.",), (4, 3), 50),
+        (("fns.",), (6, 0), 30),
+        (("bmsk.",), (7, 6), 70),
+    )
+    for op in O:
+        for prefixes, min_ptx, min_sm in requirements:
+            if op["name"].startswith(prefixes):
+                op["min_ptx"] = max(op["min_ptx"], min_ptx)
+                op["min_sm"] = max(op["min_sm"], min_sm)
     return O
 
 
@@ -199,17 +498,20 @@ def _bin64(v, name):
             "min.u64": min(a, b), "max.u64": max(a, b)}[name] & M64
 
 
-def _bfi(a, b, pos, wid):
-    mask = ((1 << wid) - 1) << pos
-    return (((a << pos) & mask) | (b & ~mask)) & M32
+def _signed_minmax(v, bits, name):
+    a, b = _signed(v[0], bits), _signed(v[1], bits)
+    return (min(a, b) if name.startswith("min") else max(a, b)) & ((1 << bits) - 1)
 
 
 def _prmt(a, b, sel):
     src = [(a >> (8 * k)) & 0xFF for k in range(4)] + [(b >> (8 * k)) & 0xFF for k in range(4)]
     res = 0
     for k in range(4):
-        s = (sel >> (4 * k)) & 7
-        res |= src[s] << (8 * k)
+        selector = (sel >> (4 * k)) & 0xF
+        byte = src[selector & 7]
+        if selector & 8:
+            byte = 0xFF if byte & 0x80 else 0
+        res |= byte << (8 * k)
     return res & M32
 
 
@@ -224,9 +526,12 @@ def _lop3(a, b, c, table):
     return res
 
 
-def _cmp(a, b, op):
-    return 1 if {"lt": a < b, "gt": a > b, "eq": a == b, "ne": a != b,
-                 "ge": a >= b}[op] else 0
+def _cmp_typed(a, b, op, bits, signed):
+    mask = (1 << bits) - 1
+    a = _signed(a, bits) if signed else a & mask
+    b = _signed(b, bits) if signed else b & mask
+    return 1 if {"lt": a < b, "le": a <= b, "gt": a > b, "ge": a >= b,
+                 "eq": a == b, "ne": a != b}[op] else 0
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +589,80 @@ class _Program:
         return self.r64(rng.randrange(self.nr64))
 
 
+_RARE_PREFIXES = (
+    "bfe.", "bfi.", "bfind.", "bfind.shiftamt.", "bmsk.", "fns.", "prmt.",
+    "lop3.", "sad.", "shf.", "shl.", "shr.", "popc.", "clz.", "brev.",
+    "mul.hi.", "mul.wide.",
+)
+
+
+def _mnemonic(internal_name: str) -> str:
+    """Return the PTX mnemonic from an internal variant name."""
+    name = internal_name.split(".", 1)[0]
+    return name
+
+
+def _is_rare(internal_name: str) -> bool:
+    return internal_name.startswith(_RARE_PREFIXES)
+
+
+def _sample_immediate(op: Dict[str, Any], occurrence: int, rng: random.Random) -> Any:
+    """Sample ISA-valid immediates with deterministic boundary-value coverage."""
+    kind = op["imm"]
+    name = op["name"]
+    if kind == "u32":
+        values = [0, 1, 0x7FFFFFFF, 0x80000000, M32]
+        return values[occurrence % len(values)] if occurrence < len(values) else rng.getrandbits(32)
+    if kind == "u64":
+        values = [0, 1, 0x7FFFFFFFFFFFFFFF, 0x8000000000000000, M64]
+        return values[occurrence % len(values)] if occurrence < len(values) else rng.getrandbits(64)
+    if kind in ("shift32_imm", "shift64_imm", "shf_count"):
+        width = 64 if kind == "shift64_imm" else 32
+        values = [0, 1, width - 1, width, width + 1, 2 * width - 1, 2 * width, 255]
+        variant_offset = sum((i + 1) * ord(ch) for i, ch in enumerate(name))
+        return values[(variant_offset + occurrence) % len(values)]
+    if kind in ("divisor32", "divisor64"):
+        values = [1, 2, 3, 7, 31, 0x7FFFFFFF]
+        return values[occurrence % len(values)]
+    if kind == "szext_count":
+        values = [0, 1, 31, 32, 33, 63, 255]
+        offset = 3 if ".clamp." in name else 4
+        return values[(offset + occurrence) % len(values)]
+    if kind in ("bfe", "bfi"):
+        width = 64 if name.endswith("64") else 32
+        if name == "bfi.b32":
+            return [(7, 39), (0, 0), (31, 2), (32, 1), (255, 255)][occurrence % 5]
+        if name == "bfi.b64":
+            return [(13, 71), (0, 0), (63, 2), (64, 1), (255, 255)][occurrence % 5]
+        pairs = [
+            (0, 0), (0, 1), (0, width), (width - 1, 1),
+            (width - 1, width), (width, 1), (width + 1, width + 5),
+            (7 if width == 32 else 13, 39 if width == 32 else 71),
+            (255, 255),
+        ]
+        variant_offset = 3 if ".s" in name else 0
+        return pairs[(variant_offset + occurrence) % len(pairs)]
+    if kind == "bmsk":
+        pairs = [(0, 0), (0, 1), (0, 31), (0, 32), (0, 33),
+                 (31, 1), (31, 2), (32, 1), (33, 39), (255, 255)]
+        offset = 7 if ".clamp." in name else 8
+        return pairs[(offset + occurrence) % len(pairs)]
+    if kind == "fns":
+        pairs = [(0, 0), (31, 0), (0, 1), (31, -1), (15, 2), (15, -2)]
+        return pairs[occurrence % len(pairs)]
+    if kind == "prmt":
+        # Generic selectors are four full nibbles.  Values 8..15 request sign
+        # replication, a documented path the previous generator never reached.
+        values = [0x89AB, 0xCDEF, 0xFFFF, 0x8888, 0x0123, 0x4567]
+        if occurrence < len(values):
+            return values[occurrence]
+        return sum(rng.randrange(16) << (4 * k) for k in range(4))
+    if kind == "lop3":
+        values = [0xE2, 0x96, 0x00, 0x01, 0x40, 0x80, 0xFE, 0xFF]
+        return values[occurrence % len(values)]
+    return None
+
+
 def _gen_program(seed: int, params: Dict[str, Any]) -> _Program:
     rng = random.Random(seed)
     nr32 = max(4, int(params.get("n_regs32", 10)))
@@ -292,6 +671,12 @@ def _gen_program(seed: int, params: Dict[str, Any]) -> _Program:
     n_instr = int(params.get("n_instr", 150))
     use_rare = bool(params.get("use_rare_ops", True))
     use_imm = bool(params.get("use_immediates", True))
+    coverage_mode = str(params.get("coverage_mode", "balanced"))
+    max_ptx_isa = tuple(int(x) for x in str(params.get("max_ptx_isa", "7.3")).split(".", 1))
+    target_sm_text = str(params.get("target_sm", "sm_86")).removeprefix("sm_")
+    target_sm = int("".join(ch for ch in target_sm_text if ch.isdigit()))
+    if coverage_mode not in ("balanced", "random"):
+        raise ValueError(f"unsupported inline PTX coverage_mode {coverage_mode!r}")
 
     prog = _Program(nr32, nr64, npred)
 
@@ -317,48 +702,61 @@ def _gen_program(seed: int, params: Dict[str, Any]) -> _Program:
     # accumulator chains (rd0 / rd1) IMMEDIATELY, so ptxas cannot dead-code it away
     # at any -O level.  Sources are biased toward older registers so values stay live
     # long (register pressure), while the two accumulators give scheduling pressure.
-    r32_ops = [o for o in _OPS_BY_DST["r32"] if o["name"] in
-               ("add.u32", "sub.u32", "mul.lo.u32", "mul.hi.u32", "and.b32", "or.b32",
-                "xor.b32", "min.u32", "max.u32", "popc.b32", "clz.b32", "brev.b32",
-                "cvt.u32.u64", "selp.b32")]
-    r64_ops = [o for o in _OPS_BY_DST["r64"] if o["name"] in
-               ("add.u64", "sub.u64", "mul.lo.u64", "mul.hi.u64", "and.b64", "or.b64",
-                "xor.b64", "min.u64", "max.u64", "cvt.u64.u32", "brev.b64")]
-    pred_ops = [o for o in _OPS_BY_DST["pred"] if o["name"] in
-                ("setp.lt.u32", "setp.gt.u32", "setp.eq.u32", "setp.ne.u32",
-                 "setp.lt.u64", "setp.gt.u64", "setp.eq.u64", "and.pred", "or.pred",
-                 "not.pred")]
-    if use_rare:
-        r32_ops += [o for o in _OPS_BY_DST["r32"] if o["name"] in
-                    ("bfe.u32", "bfi.b32", "prmt.b32", "lop3.b32", "sad.u32",
-                     "shf.r.wrap.b32", "popc.b64", "clz.b64", "shl.b32", "shr.u32",
-                     "shl.b32_i", "shr.u32_i")]
-        r64_ops += [o for o in _OPS_BY_DST["r64"] if o["name"] in
-                    ("shl.b64", "shr.u64", "shl.b64_i", "shr.u64_i")]
+    def include(o: Dict[str, Any]) -> bool:
+        if o["min_ptx"] > max_ptx_isa or o["min_sm"] > target_sm:
+            return False
+        if o["name"] in ("mov.b32", "mov.u64"):
+            return False
+        if o["name"] in ("mov.b32_i", "mov.u64_i"):
+            return use_imm
+        return use_rare or not _is_rare(o["name"])
+
+    r32_ops = [o for o in _OPS_BY_DST["r32"] if include(o)]
+    r64_ops = [o for o in _OPS_BY_DST["r64"] if include(o)]
+    pred_ops = [o for o in _OPS_BY_DST["pred"] if include(o)]
     if use_imm:
-        r32_ops += [o for o in _OPS_BY_DST["r32"] if o["name"] == "mov.b32_i"]
-        r64_ops += [o for o in _OPS_BY_DST["r64"] if o["name"] == "mov.u64_i"]
+        # Immediate moves are already included once above.  Keep the flag explicit
+        # because older code accidentally duplicated these variants in the pool.
+        assert any(o["name"] == "mov.b32_i" for o in r32_ops)
+        assert any(o["name"] == "mov.u64_i" for o in r64_ops)
+
+    coverage_queue: List[Dict[str, Any]] = []
+    if coverage_mode == "balanced":
+        coverage_queue = r32_ops + r64_ops + pred_ops
+        rng.shuffle(coverage_queue)
+    immediate_occurrences: Dict[str, int] = {}
+    shift_occurrences: Dict[str, int] = {}
 
     rd0, rd1 = prog.r64(0), prog.r64(1)
     scratch = prog.r64(2)
     fold_r32 = prog.r32(0)
     chain_prev = None
     for k in range(n_instr):
-        kind = rng.choices(["r32", "r64", "pred"], weights=[0.55, 0.25, 0.20])[0]
-        pool = {"r32": r32_ops, "r64": r64_ops, "pred": pred_ops}[kind]
-        op = rng.choice(pool)
+        if coverage_mode == "balanced":
+            if not coverage_queue:
+                coverage_queue = r32_ops + r64_ops + pred_ops
+                rng.shuffle(coverage_queue)
+            op = coverage_queue.pop()
+            kind = op["dst"]
+        else:
+            kind = rng.choices(["r32", "r64", "pred"], weights=[0.55, 0.25, 0.20])[0]
+            pool = {"r32": r32_ops, "r64": r64_ops, "pred": pred_ops}[kind]
+            op = rng.choice(pool)
         if op["imm"] in ("shift32", "shift64"):
             value_kind = op["srcs"][0]
             value = prog._pick_src(value_kind, rng, chain_prev)
-            if value_kind == "r32":
-                tmp = prog.r32(rng.randrange(nr32))
-                cnt_src = prog._pick_src("r32", rng, chain_prev)
-                prog.add("and.b32", tmp, [cnt_src, _const_kind(31)], note="mask-shift")
+            tmp = prog.r32(rng.randrange(nr32))
+            occurrence = shift_occurrences.get(op["name"], 0)
+            shift_occurrences[op["name"]] = occurrence + 1
+            width = 64 if op["imm"] == "shift64" else 32
+            boundaries = [0, 1, width - 1, width, width + 1, 255]
+            if occurrence < len(boundaries):
+                variant_offset = sum((i + 1) * ord(ch) for i, ch in enumerate(op["name"]))
+                count = boundaries[(variant_offset + occurrence) % len(boundaries)]
+                prog.add("mov.b32_i", tmp, [], count, note="shift-boundary")
             else:
-                tmp = prog.r32(rng.randrange(nr32))
-                cnt_src = prog._pick_src("r64", rng, chain_prev)
-                prog.add("cvt.u32.u64", tmp, [cnt_src], note="shift-low32")
-                prog.add("and.b32", tmp, [tmp, _const_kind(63)], note="mask-shift")
+                cnt_src = prog._pick_src("r32", rng, chain_prev)
+                prog.add("mov.b32", tmp, [cnt_src], note="shift-runtime-u32")
             srcs = [value, tmp]
         else:
             srcs = []
@@ -377,26 +775,10 @@ def _gen_program(seed: int, params: Dict[str, Any]) -> _Program:
         # immediate
         imm = None
         it = op["imm"]
-        if it == "u32":
-            imm = rng.getrandbits(32)
-        elif it == "u64":
-            imm = rng.getrandbits(64)
-        elif it == "imm5":
-            imm = rng.randrange(32)
-        elif it == "imm6":
-            imm = rng.randrange(64)
-        elif it in ("bfe", "bfi"):
-            # PTX requires pos + wid <= 32 (else undefined) -- enforce it strictly.
-            pos = rng.randrange(0, 16)
-            wid = rng.randrange(1, min(16, 32 - pos) + 1)
-            imm = (pos, wid)
-        elif it == "prmt":
-            sel = 0
-            for _k in range(4):
-                sel |= rng.randrange(8) << (4 * _k)
-            imm = sel
-        elif it == "lop3":
-            imm = rng.randrange(256)
+        if it is not None and it not in ("shift32", "shift64"):
+            occurrence = immediate_occurrences.get(op["name"], 0)
+            immediate_occurrences[op["name"]] = occurrence + 1
+            imm = _sample_immediate(op, occurrence, rng)
         prog.add(op["name"], dst, srcs, imm)
         if dst[0] in ("r32", "r64"):
             chain_prev = dst
@@ -414,6 +796,16 @@ def _gen_program(seed: int, params: Dict[str, Any]) -> _Program:
         # keep the other accumulator mixed in occasionally (independent path)
         if k % 7 == 0:
             prog.add("add.u64", rd0, [rd0, rd1])
+
+    # Final runtime anchors guarantee input sensitivity even when a balanced
+    # schedule ends in value-destroying operations such as cnot or a zero-width
+    # bit-field.  They are deliberately emitted in PTX rather than C++ so the
+    # tested block remains the complete data-flow path.
+    prog.add("mov.b32", fold_r32, [("in32", 0)], note="input-anchor32")
+    prog.add("cvt.u64.u32", scratch, [fold_r32], note="input-anchor32")
+    prog.add("xor.b64", rd0, [rd0, scratch], note="input-anchor32")
+    prog.add("mov.u64", scratch, [("in64", 0)], note="input-anchor64")
+    prog.add("xor.b64", rd1, [rd1, scratch], note="input-anchor64")
 
     # final outputs
     prog.add("out", rd0, [])
@@ -555,7 +947,7 @@ class InlinePtx(Strategy):
     target_opcodes = ["prmt", "shf", "bfe", "bfi", "lop3", "sad", "mul.hi",
                       "popc", "clz", "brev", "selp", "setp"]
 
-    def _fmt_params(self, p: Dict[str, Any]) -> Dict[str, Any]:
+    def _fmt_params(self, p: Dict[str, Any], target_sm: Optional[str] = None) -> Dict[str, Any]:
         return {
             "n_instr": int(p.get("n_instr", 150)),
             "n_regs32": int(p.get("n_regs32", 10)),
@@ -563,6 +955,11 @@ class InlinePtx(Strategy):
             "n_preds": int(p.get("n_preds", 4)),
             "use_rare_ops": bool(p.get("use_rare_ops", True)),
             "use_immediates": bool(p.get("use_immediates", True)),
+            "coverage_mode": str(p.get("coverage_mode", "balanced")),
+            # CUDA 11.3, the oldest configured comparator, supports PTX 7.3.
+            # Newer ISA variants remain available when explicitly requested.
+            "max_ptx_isa": str(p.get("max_ptx_isa", "7.3")),
+            "target_sm": str(target_sm or p.get("target_sm", "sm_86")),
         }
 
     def _program(self, seed: int, params: Dict[str, Any]) -> _Program:
@@ -570,7 +967,7 @@ class InlinePtx(Strategy):
 
     def generate(self, config_seed: int, test_seed: int, params: Dict[str, Any],
                  gen_version: str, target_sm: str) -> GeneratedCase:
-        p = self._fmt_params(params)
+        p = self._fmt_params(params, target_sm)
         rng = self._new_rng(config_seed, test_seed)
         input_words = 256
         words = make_input_words(rng, input_words, 8)
@@ -582,9 +979,17 @@ class InlinePtx(Strategy):
         output_words = grid[0] * block[0] * owpt
         input_bytes = pack_words(words)
         expected = self.cpu_oracle(input_words, seed, p, input_bytes, grid, block, owpt)
+        params_out = dict(p)
+        params_out["covered_ptx_variants"] = sorted({
+            step["op"] for step in prog.steps
+            if step["op"] != "out" and not step["op"].startswith("mov.")
+        })
+        params_out["covered_ptx_mnemonics"] = sorted({
+            _mnemonic(name) for name in params_out["covered_ptx_variants"]
+        })
         return GeneratedCase(
             test_id=f"inline_ptx__{config_seed:x}__{test_seed:x}",
-            config_seed=config_seed, test_seed=test_seed, strategy=self.name, params=p,
+            config_seed=config_seed, test_seed=test_seed, strategy=self.name, params=params_out,
             generator_version=gen_version, kernel_seed=seed, source=source,
             input_bytes=input_bytes, expected_bytes=expected,
             grid=grid, block=block, input_words=input_words, output_words=output_words,

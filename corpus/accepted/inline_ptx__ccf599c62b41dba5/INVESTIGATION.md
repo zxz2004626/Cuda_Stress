@@ -22,10 +22,12 @@ The exact same kernel produces:
 3. Isolated to ptxas: the exact PTX emitted by `nvcc -ptx` fed directly to
    `ptxas -arch=sm_86 -O0` vs `-O1` reproduces the divergence (O0 correct, O1 wrong).
    No nvcc/cicc front-end involvement.
-4. Runtime legality audit of every instruction (shift counts, bfe/bfi pos+wid <= 32,
-   prmt selectors, immediates) found ZERO undefined-behaviour violations.  (An earlier
-   real UB in bfe/bfi generation was found and fixed -- pos+wid could reach 33 -- and is
-   a separate, already-resolved issue.)
+4. Runtime legality audit of every instruction (shift counts pre-masked, bfe/bfi
+   pos/len in [0,255] with fields past the MSB well-defined, prmt selectors, immediates)
+   found ZERO undefined-behaviour violations.  (Note: PTX bfe/bfi do NOT require
+   pos+wid <= width; a field extending past the MSB is well-defined -- zero-extended for
+   bfe, dropped for bfi.  An earlier note in this investigation claiming otherwise was
+   wrong and has been removed; the generator now samples that legal over-MSB region.)
 5. Root cause isolated by op-family and per-instruction disabling: the divergence is
    essential to exactly ONE instruction --
        step 37:  prmt.b32 %xr5, %xr2, %xr2, 0x6402      // prmt(d, a, a, sel)

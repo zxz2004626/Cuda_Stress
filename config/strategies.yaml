@@ -6,7 +6,7 @@ defaults:
   block: [64]                 # blockDim
   grid: [1]                   # gridDim
   output_words_per_thread: 2  # u64 outputs per thread
-  generator_version: "1.0.0"
+  generator_version: "1.1.0"
 
 strategies:
   predicate_pressure:
@@ -58,7 +58,11 @@ strategies:
     enabled: true
     weight: 0.9
     variants:
-      - { n_instr: 60,  n_regs32: 10, n_regs64: 6, n_preds: 4, use_rare_ops: true,  use_immediates: true }
-      - { n_instr: 120, n_regs32: 12, n_regs64: 6, n_preds: 5, use_rare_ops: true,  use_immediates: true }
-      - { n_instr: 180, n_regs32: 16, n_regs64: 8, n_preds: 6, use_rare_ops: true,  use_immediates: false }
-      - { n_instr: 90,  n_regs32: 14, n_regs64: 5, n_preds: 4, use_rare_ops: false, use_immediates: true }
+      # PTX 7.3 is the newest common baseline accepted by every configured toolkit
+      # (CUDA 11.3 through 12.6). Balanced mode traverses every eligible variant
+      # before repeating one, while random mode retains stochastic combinations.
+      - { n_instr: 80,  n_regs32: 10, n_regs64: 6, n_preds: 4, use_rare_ops: true,  use_immediates: true,  coverage_mode: random,   max_ptx_isa: "7.3" }
+      - { n_instr: 160, n_regs32: 12, n_regs64: 6, n_preds: 5, use_rare_ops: true,  use_immediates: true,  coverage_mode: balanced, max_ptx_isa: "7.3" }
+      - { n_instr: 220, n_regs32: 16, n_regs64: 8, n_preds: 6, use_rare_ops: true,  use_immediates: false, coverage_mode: balanced, max_ptx_isa: "7.3" }
+      - { n_instr: 120, n_regs32: 14, n_regs64: 5, n_preds: 4, use_rare_ops: false, use_immediates: true,  coverage_mode: balanced, max_ptx_isa: "7.3" }
+      - { n_instr: 260, n_regs32: 18, n_regs64: 9, n_preds: 7, use_rare_ops: true,  use_immediates: true,  coverage_mode: balanced, max_ptx_isa: "7.3" }

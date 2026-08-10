@@ -6,6 +6,7 @@ project:
   run_id: ""          # empty => auto <run>-<timestamp>
 
 generation:
+  generator_version: "1.1.0"  # ISA-constrained balanced inline-PTX generator
   config_seed: 20260810
   batch_size: 8              # cases generated per tick in `loop`
   backlog_target: 64         # keep this many generated-but-uncompiled cases queued

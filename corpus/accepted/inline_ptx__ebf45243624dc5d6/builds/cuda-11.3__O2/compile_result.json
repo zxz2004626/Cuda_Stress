@@ -1,0 +1,58 @@
+{
+  "toolchain": "cuda-11.3",
+  "profile": "O2",
+  "ok": true,
+  "error": null,
+  "commands": [
+    {
+      "stage": "ptx",
+      "argv": [
+        "/usr/local/cuda-11.3/bin/nvcc",
+        "-arch=sm_86",
+        "-ccbin",
+        "/usr/bin/gcc-8",
+        "-ptx",
+        "-o",
+        "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ebf45243624dc5d6/builds/cuda-11.3__O2/kernel.ptx",
+        "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ebf45243624dc5d6/test.cu"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "",
+      "elapsed_s": 0.146,
+      "ok": true
+    },
+    {
+      "stage": "cubin",
+      "argv": [
+        "/usr/local/cuda-11.3/bin/ptxas",
+        "-arch=sm_86",
+        "-O2",
+        "-v",
+        "-o",
+        "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ebf45243624dc5d6/builds/cuda-11.3__O2/kernel.cubin",
+        "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ebf45243624dc5d6/builds/cuda-11.3__O2/kernel.ptx"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function 'test_kernel' for 'sm_86'\nptxas info    : Function properties for test_kernel\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 25 registers, 384 bytes cmem[0]\n",
+      "elapsed_s": 0.044,
+      "ok": true
+    },
+    {
+      "stage": "sass",
+      "argv": [
+        "/usr/local/cuda-11.3/bin/cuobjdump",
+        "-sass",
+        "/home/linux/cuda_stress/corpus/accepted/inline_ptx__ebf45243624dc5d6/builds/cuda-11.3__O2/kernel.cubin"
+      ],
+      "returncode": 0,
+      "stdout": "                                                  /* 0x000fe40000000000 */\n        /*0dd0*/                   SHF.L.U64.HI R17, R20, 0x10, R15 ;                   /* 0x0000001014117819 */\n                                                                                        /* 0x000fe4000001020f */\n        /*0de0*/                   LOP3.LUT R5, R4, R20, R5, 0x96, !PT ;                /* 0x0000001404057212 */\n                                                                                        /* 0x000fe400078e9605 */\n        /*0df0*/                   ISETP.GT.U32.AND.EX P0, PT, R11, R17, PT, P1 ;       /* 0x000000110b00720c */\n                                                                                        /* 0x000fe20003f04110 */\n        /*0e00*/                   IMAD.SHL.U32 R17, R12, 0x10, RZ ;                    /* 0x000000100c117824 */\n                                                                                        /* 0x000fe200078e00ff */\n        /*0e10*/                   LOP3.LUT R7, R14, 0x3e0, R7, 0xe2, !PT ;             /* 0x000003e00e077812 */\n                                                                                        /* 0x000fc400078ee207 */\n        /*0e20*/                   LOP3.LUT R5, R5, R10, RZ, 0x3c, !PT ;                /* 0x0000000a05057212 */\n                                                                                        /* 0x000fe400078e3cff */\n        /*0e30*/                   SEL R14, R13, R6.reuse, !P2 ;                        /* 0x000000060d0e7207 */\n                                                                                        /* 0x080fe40005000000 */\n        /*0e40*/                   LOP3.LUT R4, R17, 0xf0, R12, 0xe2, !PT ;             /* 0x000000f011047812 */\n                                                                                        /* 0x000fe400078ee20c */\n        /*0e50*/                   SEL R6, R13, R6, P0 ;                                /* 0x000000060d067207 */\n                                                                                        /* 0x000fe40000000000 */\n        /*0e60*/                   IADD3 R13, P0, R5, R8, RZ ;                          /* 0x00000008050d7210 */\n                                                                                        /* 0x000fe20007f1e0ff */\n        /*0e70*/                   IMAD R5, R3.reuse, R14, RZ ;                         /* 0x0000000e03057224 */\n                                                                                        /* 0x040fe200078e02ff */\n        /*0e80*/                   LOP3.LUT R6, R6, R8, R7, 0x96, !PT ;                 /* 0x0000000806067212 */\n                                                                                        /* 0x000fe200078e9607 */\n        /*0e90*/                   IMAD.IADD R3, R3, 0x1, -R4 ;                         /* 0x0000000103037824 */\n                                                                                        /* 0x000fe200078e0a04 */\n        /*0ea0*/                   LOP3.LUT R4, R4, R13, R12, 0x96, !PT ;               /* 0x0000000d04047212 */\n                                                                                        /* 0x000fc400078e960c */\n        /*0eb0*/                   LOP3.LUT R8, R5, R6, R14, 0x96, !PT ;                /* 0x0000000605087212 */\n                                                                                        /* 0x000fe400078e960e */\n        /*0ec0*/                   LOP3.LUT R5, R4, R3, RZ, 0x3c, !PT ;                 /* 0x0000000304057212 */\n                                                                                        /* 0x000fe200078e3cff */\n        /*0ed0*/                   IMAD.SHL.U32 R3, R2, 0x2, RZ ;                       /* 0x0000000202037824 */\n                                                                                        /* 0x000fe200078e00ff */\n        /*0ee0*/                   LOP3.LUT R11, R15, R11, RZ, 0x3c, !PT ;              /* 0x0000000b0f0b7212 */\n                                                                                        /* 0x000fe400078e3cff */\n        /*0ef0*/                   IADD3 R4, P1, R8, R5, RZ ;                           /* 0x0000000508047210 */\n                                                                                        /* 0x000fe20007f3e0ff */\n        /*0f00*/                   IMAD.WIDE.U32 R2, R3, R0, c[0x0][0x168] ;            /* 0x00005a0003027625 */\n                                                                                        /* 0x000fc600078e0000 */\n        /*0f10*/                   IADD3.X R5, R9, R11, R9, P1, P0 ;                    /* 0x0000000b09057210 */\n                                                                                        /* 0x000fe40000fe0409 */\n        /*0f20*/                   STG.E.64 [R2.64+0x8], R8 ;                           /* 0x0000080802007986 */\n                                                                                        /* 0x000fe8000c101b04 */\n        /*0f30*/                   STG.E.64 [R2.64], R4 ;                               /* 0x0000000402007986 */\n                                                                                        /* 0x000fe2000c101b04 */\n        /*0f40*/                   EXIT ;                                               /* 0x000000000000794d */\n                                                                                        /* 0x000fea0003800000 */\n        /*0f50*/                   BRA 0xf50;                                           /* 0xfffffff000007947 */\n                                                                                        /* 0x000fc0000383ffff */\n        /*0f60*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0f70*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0f80*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0f90*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0fa0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0fb0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0fc0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0fd0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0fe0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n        /*0ff0*/                   NOP;                                                 /* 0x0000000000007918 */\n                                                                                        /* 0x000fc00000000000 */\n\t\t..........\n\n\n",
+      "stderr": "",
+      "elapsed_s": 0.192,
+      "ok": true
+    }
+  ],
+  "ptxas_verbose": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function 'test_kernel' for 'sm_86'\nptxas info    : Function properties for test_kernel\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 25 registers, 384 bytes cmem[0]\n",
+  "registers": 25
+}

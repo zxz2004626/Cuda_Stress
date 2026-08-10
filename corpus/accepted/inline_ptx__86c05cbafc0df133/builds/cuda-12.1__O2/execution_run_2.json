@@ -3,7 +3,7 @@
   "status_code": 0,
   "error": "",
   "guard_ok": true,
-  "elapsed_us": 154099,
+  "elapsed_us": 245828,
   "output_hash": "8cfe7ce636792cc3",
   "meaningful_words": 128,
   "device": "NVIDIA GeForce RTX 2050",
