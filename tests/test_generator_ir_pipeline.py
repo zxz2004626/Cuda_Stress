@@ -1,6 +1,7 @@
 """IR generator adapter and Driver-checksum execution tests."""
 
 import json
+import re
 import struct
 from concurrent.futures import ThreadPoolExecutor
 
@@ -19,6 +20,23 @@ IR_PARAMS = {
     "amplify_iters": 1,
     "codegen": False,
 }
+
+
+@pytest.mark.parametrize("template", ["prefix_scan", "tile_swap", "tiled_gemm"])
+def test_structured_observable_templates_have_one_output_writer(template):
+    """Natural result layouts must not race the final output[tid] checksum."""
+    case = default_registry().get("generator_ir").generate(
+        101, 202, {
+            "template": template,
+            "complexity": "low",
+            "amplify_iters": 2,
+            "codegen": False,
+        }, "test", "sm_86")
+    kernel_source = case.source.split("int main(void)", 1)[0]
+    writes = re.findall(r"\boutput\s*\[[^;\n]+\]\s*(?:\^?=)", kernel_source)
+    assert writes == ["output[tid] ="]
+    assert "_fv =" in kernel_source
+    assert "__syncthreads()" in kernel_source
 
 
 def test_generator_ir_emits_reproducible_checksum_only_program():

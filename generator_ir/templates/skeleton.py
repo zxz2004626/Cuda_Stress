@@ -9,7 +9,7 @@ from generator_ir.ir.typedecl import (
     GType, T, TUInt, TUShort, TULong,
 )
 from generator_ir.ir.operators import Arith, SafeOp
-from generator_ir.ir.nodes import Expr, Var, BinOp, Subscript, SafeBin, Cast
+from generator_ir.ir.nodes import Expr, Lit, Var, BinOp, Subscript, SafeBin, Cast
 from generator_ir.ir.statements import Stmt, Assign, Declare
 
 if TYPE_CHECKING:
@@ -114,6 +114,33 @@ class KernelTemplate(ABC):
         name = ctx.kx_fresh_name("v")
         ctx.kx_declare(Var(rt, name=name))
         return [Declare(name=name, gtype=rt, init=value)]
+
+    def observable_result(self, value: Expr,
+                          logical_index: Optional[Expr] = None) -> Stmt:
+        """Fold a structured template result into the thread-local checksum.
+
+        In observable mode the assembler owns ``output`` and gives every slot
+        exactly one writer via its final ``output[tid] = _fv`` epilogue.  A
+        structured template whose natural result layout is not ``tid`` must
+        therefore route its result through ``_fv`` rather than write the same
+        output buffer using a second index mapping.  Including the logical
+        result index keeps that mapping observable without a global-memory
+        write or any need for grid-wide synchronization.
+        """
+        value_u = Cast(T.u32, to=T.u32, arg=value)
+        if logical_index is not None:
+            index_u = Cast(T.u32, to=T.u32, arg=logical_index)
+            value_u = BinOp(
+                T.u32, op=Arith.BXOR, lhs=value_u,
+                rhs=BinOp(T.u32, op=Arith.MUL, lhs=index_u,
+                          rhs=Lit(T.u32, value=0x85EBCA6B)))
+        fv = Var(T.u32, name="_fv")
+        return Assign(
+            fv,
+            BinOp(T.u32, op=Arith.BXOR,
+                  lhs=BinOp(T.u32, op=Arith.MUL, lhs=fv,
+                            rhs=Lit(T.u32, value=0x9E3779B1)),
+                  rhs=value_u))
 
     def _synthetic_flat_sequence(self, ctx: "GenContext") -> List[Stmt]:
         """Default flat body: load input[tid % n], a few generated statements,

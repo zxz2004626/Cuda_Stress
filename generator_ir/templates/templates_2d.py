@@ -165,9 +165,17 @@ class MatmulTemplate(KernelTemplate):
 
         out_idx = BinOp(T.u32, op=Arith.ADD,
                         lhs=BinOp(T.u32, op=Arith.MUL, lhs=row, rhs=n_u), rhs=col)
+        # In observable mode the assembler emits the sole global result write
+        # (output[tid] = _fv).  Writing this template's row/column mapping to
+        # the same buffer would race that epilogue across blocks.  Fold both
+        # the GEMM value and its logical matrix index into the owning thread's
+        # checksum instead.
+        result_stmt = (self.observable_result(acc, out_idx)
+                       if ctx.config.observable_fold
+                       else Assign(Subscript(T.u32, array=output_var,
+                                             index=out_idx), acc))
         stmts.append(If(cond=RelOp(T.boolean, op=Cmp.LT, lhs=out_idx, rhs=n_sq),
-                        then=Block([Assign(
-                            Subscript(T.u32, array=output_var, index=out_idx), acc)])))
+                        then=Block([result_stmt])))
         return stmts
 
 
@@ -217,8 +225,9 @@ class ScanTemplate(KernelTemplate):
         return (64, 1, 1)
 
     def uses_non_tid_output(self) -> bool:
-        # Scan writes output[idx] with idx = 2*blockIdx.x*blockDim.x +
-        # threadIdx.x, which is not tid = blockIdx.x*blockDim.x + threadIdx.x.
+        # The structured scan layout is idx = 2*blockIdx.x*blockDim.x +
+        # threadIdx.x rather than tid. Observable mode folds that logical
+        # mapping into _fv; non-observable mode still writes it directly.
         return True
 
     def build_body(self, ctx: GenContext) -> List[Stmt]:
@@ -339,16 +348,23 @@ class ScanTemplate(KernelTemplate):
             offset2 //= 2
         stmts.append(Barrier())
 
-        # Write both elements back (non-tid layout: each block covers
-        # 2*blockDim.x consecutive outputs).
+        # Route both scan results. In observable mode these are thread-local
+        # folds because the assembler owns output[tid]; in legacy/performance
+        # mode the template retains its natural two-elements-per-thread output.
+        first_result = Subscript(T.u32, array=temp, index=lane)
+        second_result = Subscript(T.u32, array=temp, index=lane_bdx)
+        first_stmt = (self.observable_result(first_result, idx)
+                      if ctx.config.observable_fold
+                      else Assign(Subscript(T.u32, array=output_var, index=idx),
+                                  first_result))
+        second_stmt = (self.observable_result(second_result, idx_bdx)
+                       if ctx.config.observable_fold
+                       else Assign(Subscript(T.u32, array=output_var,
+                                             index=idx_bdx), second_result))
         stmts.append(If(cond=RelOp(T.boolean, op=Cmp.LT, lhs=idx, rhs=n_u),
-                        then=Block([Assign(
-                            Subscript(T.u32, array=output_var, index=idx),
-                            Subscript(T.u32, array=temp, index=lane))])))
+                        then=Block([first_stmt])))
         stmts.append(If(cond=RelOp(T.boolean, op=Cmp.LT, lhs=idx_bdx, rhs=n_u),
-                        then=Block([Assign(
-                            Subscript(T.u32, array=output_var, index=idx_bdx),
-                            Subscript(T.u32, array=temp, index=lane_bdx))])))
+                        then=Block([second_stmt])))
         return stmts
 
 
@@ -601,13 +617,14 @@ class TransposeTemplate(KernelTemplate):
                                                   lhs=bx, rhs=td_c), rhs=ty)))
         out_idx = BinOp(T.u32, op=Arith.ADD,
                         lhs=BinOp(T.u32, op=Arith.MUL, lhs=y2, rhs=n_u), rhs=x2)
+        transposed = Subscript(T.u32, array=tile, index=lin(tx, ty))
+        result_stmt = (self.observable_result(transposed, out_idx)
+                       if ctx.config.observable_fold
+                       else Assign(Subscript(T.u32, array=output_var,
+                                             index=out_idx), transposed))
         stmts.append(If(cond=RelOp(T.boolean, op=Cmp.LT, lhs=y2, rhs=n_u),
                         then=Block([If(
                             cond=RelOp(T.boolean, op=Cmp.LT, lhs=x2, rhs=n_u),
-                            then=Block([Assign(
-                                Subscript(T.u32, array=output_var, index=out_idx),
-                                Subscript(T.u32, array=tile,
-                                          index=lin(tx, ty)))]))])))
+                            then=Block([result_stmt]))])))
         return stmts
-
 
