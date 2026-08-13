@@ -446,6 +446,7 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
     if not exe.exists():
         info = {"status": "BAD_SPEC", "returncode": -1,
                 "error": "standalone executable missing",
+                "device": int(device),
                 "input_salt": int(input_salt) & 0xFFFFFFFF}
         exec_path.write_text(json.dumps(info, indent=2))
         return RunResult(status="BAD_SPEC", output_words=None,
@@ -457,6 +458,12 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
     # CUDA_VISIBLE_DEVICES maps the requested physical device to logical 0.
     env["CUDA_VISIBLE_DEVICES"] = str(device)
     env["CUDA_STRESS_INPUT_SALT"] = str(int(input_salt) & 0xFFFFFFFF)
+    # For the unsalted fast pass, ask the harness to also emit a salt=1 checksum
+    # in the same process (reusing the CUDA context), so the input-sensitivity
+    # oracle does not need a second process launch.
+    also_salt = int(input_salt) == 0
+    if also_salt:
+        env["CUDA_STRESS_ALSO_SALT"] = "1"
     t0 = time.monotonic()
     try:
         proc = subprocess.run([str(exe)], capture_output=True, text=True,
@@ -465,6 +472,7 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
         info = {
             "status": "TIMEOUT", "returncode": 124,
             "elapsed_us": int(limit * 1_000_000),
+            "device": int(device),
             "input_salt": int(input_salt) & 0xFFFFFFFF,
             "stdout": (exc.stdout or "")[-8000:] if isinstance(exc.stdout, str) else "",
             "stderr": (exc.stderr or "")[-8000:] if isinstance(exc.stderr, str) else "",
@@ -475,6 +483,7 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
                          elapsed_us=info["elapsed_us"], execution=info)
     except OSError as exc:
         info = {"status": "BAD_SPEC", "returncode": -1, "error": str(exc),
+                "device": int(device),
                 "input_salt": int(input_salt) & 0xFFFFFFFF}
         exec_path.write_text(json.dumps(info, indent=2))
         return RunResult(status="BAD_SPEC", output_words=None,
@@ -490,23 +499,28 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
     status = "OK"
     error = ""
     checksum: Optional[int] = None
+    salted_checksum: Optional[int] = None
     if proc.returncode != 0:
         status = "CUDA_ERROR"
         error = proc.stderr[-500:] or f"standalone harness exited {proc.returncode}"
-    elif len(matches) != 1:
+    elif not matches:
         status = "BAD_SPEC"
-        error = f"expected exactly one checksum=<u64> line, found {len(matches)}"
-    elif not 0 <= matches[0] <= 0xFFFFFFFFFFFFFFFF:
+        error = "expected at least one checksum=<u64> line, found none"
+    elif any(not 0 <= m <= 0xFFFFFFFFFFFFFFFF for m in matches):
         status = "BAD_SPEC"
-        error = f"checksum outside u64 range: {matches[0]}"
+        error = f"checksum outside u64 range: {matches}"
     else:
         checksum = matches[0]
+        if len(matches) >= 2:
+            salted_checksum = matches[1]
 
     info = {
         "status": status,
         "returncode": proc.returncode,
         "elapsed_us": elapsed_us,
         "checksum": checksum,
+        "salted_checksum": salted_checksum,
+        "device": int(device),
         "input_salt": int(input_salt) & 0xFFFFFFFF,
         "stdout": proc.stdout[-8000:],
         "stderr": proc.stderr[-8000:],
@@ -518,31 +532,44 @@ def _run_standalone_checksum(config: Config, tc: Toolchain,
 
     payload = struct.pack("<Q", checksum)
     _write_ok_blob(out_path, case.case_id(), payload)
+    if salted_checksum is not None:
+        salt_path = build_dir / "output_run_input_sensitivity.bin"
+        _write_ok_blob(salt_path, case.case_id(), struct.pack("<Q", salted_checksum))
     return RunResult(status="OK", output_words=payload, meaningful_words=1,
                      elapsed_us=elapsed_us, execution=info)
 
 
 class DeviceGate:
-    """Serialize GPU work per device.  One thread per device may run a kernel at a time."""
+    """Gate GPU work per device.
 
-    def __init__(self, gpu_devices: List[int]) -> None:
-        self._locks: Dict[int, threading.Lock] = {d: threading.Lock() for d in gpu_devices}
+    By default (``workers_per_device == 1``) one kernel runs on a GPU at a time,
+    which keeps runs isolated and deterministic.  Raising it lets several cases
+    run concurrently on the same GPU: their host<->device copies (DMA) overlap
+    with each other's kernel execution, though the kernels themselves only truly
+    co-schedule under CUDA MPS (``nvidia-cuda-mps-control``), not plain streams.
+    """
+
+    def __init__(self, gpu_devices: List[int], workers_per_device: int = 1) -> None:
+        self._workers = max(1, int(workers_per_device))
+        self._gates: Dict[int, threading.BoundedSemaphore] = {
+            d: threading.BoundedSemaphore(self._workers) for d in gpu_devices
+        }
 
     def acquire(self, device: int):
-        lock = self._locks.setdefault(device, threading.Lock())
-        lock.acquire()
-        return _DeviceLease(lock)
+        gate = self._gates.setdefault(device, threading.BoundedSemaphore(self._workers))
+        gate.acquire()
+        return _DeviceLease(gate)
 
     def __call__(self, device: int):
         return self.acquire(device)
 
 
 class _DeviceLease:
-    def __init__(self, lock: threading.Lock) -> None:
-        self._lock = lock
+    def __init__(self, gate) -> None:
+        self._gate = gate
 
     def __enter__(self):
         return self
 
     def __exit__(self, *a):
-        self._lock.release()
+        self._gate.release()

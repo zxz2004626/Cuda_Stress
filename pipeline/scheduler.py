@@ -121,10 +121,14 @@ class LoopScheduler:
 
         self.compile_pool = ThreadPoolExecutor(max_workers=int(config.compilation.get("jobs_compile", 8)),
                                                thread_name_prefix="compile")
-        self.run_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="gpu")
         self.devices = config.execution.get("gpu_devices") or detect_gpu_devices()
-        self.device_gate = executor.DeviceGate(self.devices)
         self.gpu_workers = int(config.execution.get("gpu_workers_per_device", 1))
+        # Enough GPU threads to keep every device-worker busy plus slack for the
+        # threads blocked on the per-device gate.
+        self.run_pool = ThreadPoolExecutor(
+            max_workers=max(4, 2 * len(self.devices) * self.gpu_workers),
+            thread_name_prefix="gpu")
+        self.device_gate = executor.DeviceGate(self.devices, workers_per_device=self.gpu_workers)
 
         # in-flight tracking
         self._build_futures: Dict[str, Dict[str, Future]] = {}
@@ -134,7 +138,10 @@ class LoopScheduler:
         self._inflight_lock = threading.Lock()
         self._generated_count = self.stats.generated
 
-        self._gpu_occupied = threading.Semaphore(self.gpu_workers * len(self.devices))
+        # Per-device case occupancy so parallel GPUs each get their share of
+        # work (see _pick_device / _dispatch_runs / _collect_runs).
+        self._device_load: Dict[int, int] = {d: 0 for d in self.devices}
+        self._case_device: Dict[str, int] = {}
         self._last_gc_count = 0
 
     # ------------------------------------------------------------------ utils
@@ -175,7 +182,7 @@ class LoopScheduler:
             return str(configured)
         if self.cfg.toolchains:
             return str(self.cfg.toolchains[0].arch)
-        return "sm_86"
+        return "sm_75"
 
     def _next_strategy(self) -> str:
         w = self.stats.strategy_weights
@@ -278,6 +285,13 @@ class LoopScheduler:
     def _dispatch_compiles(self) -> None:
         if self.stop.is_set:
             return
+        # Backpressure: if the GPU run stage is already saturated, stop pushing
+        # newly-compiled cases into ready_to_run.  Without this, compilation far
+        # outpaces execution, the ready_to_run queue (and runs/<id>/tests build
+        # artifacts) grows without bound, and listing the directory on every loop
+        # tick drags the whole scheduler down.
+        if self.queue.count("ready_to_run") >= int(self.cfg.execution.get("run_backlog_target", 64)):
+            return
         inflight = sum(len(v) for v in self._build_futures.values())
         limit = int(self.cfg.compilation.get("jobs_compile", 8)) * 2
         if inflight >= limit:
@@ -316,19 +330,38 @@ class LoopScheduler:
             self.stats.compiled += 1
 
     # ------------------------------------------------------------------ run
+    def _pick_device(self) -> Optional[int]:
+        """Least-loaded GPU still under its per-device case cap.
+
+        Each device runs ``gpu_workers_per_device`` cases concurrently (default 1);
+        within a case, builds serialize on that device via ``DeviceGate``.  Picking
+        the least-loaded device spreads independent cases across all GPUs so they
+        execute in parallel.
+        """
+        best: Optional[int] = None
+        for d in self.devices:
+            load = self._device_load.get(d, 0)
+            if load >= self.gpu_workers:
+                continue
+            if best is None or load < self._device_load.get(best, 0):
+                best = d
+        return best
+
     def _dispatch_runs(self) -> None:
         if self.stop.is_set:
             return
         for case_id in self.queue.list("ready_to_run"):
             if case_id in self._run_futures:
                 continue
-            if not self._gpu_occupied.acquire(blocking=False):
+            device = self._pick_device()
+            if device is None:
                 break
             try:
                 self.queue.to_running(case_id)
             except FileNotFoundError:
-                self._gpu_occupied.release()
                 continue
+            self._device_load[device] += 1
+            self._case_device[case_id] = device
             test_dir = self._test_dir(case_id)
             case = _case_from_dir(test_dir)
             self._run_futures[case_id] = {}
@@ -340,7 +373,7 @@ class LoopScheduler:
                     key = compiler.build_key(tc.id, prof.name)
                     build_dir = test_dir / "builds" / key
                     f = self.run_pool.submit(worker_run, self.cfg, tc, case, build_dir,
-                                             runs, self.device_gate, self.devices[0], self.stop)
+                                             runs, self.device_gate, device, self.stop)
                     self._run_futures[case_id][key] = f
 
     def _collect_runs(self) -> None:
@@ -348,7 +381,8 @@ class LoopScheduler:
                 if fs and all(f.done() for f in fs.values())]
         for case_id in done:
             self._run_futures.pop(case_id, None)
-            self._gpu_occupied.release()
+            device = self._case_device.pop(case_id, self.devices[0])
+            self._device_load[device] = max(0, self._device_load.get(device, 1) - 1)
             try:
                 self.queue.to_triage(case_id)
             except FileNotFoundError:

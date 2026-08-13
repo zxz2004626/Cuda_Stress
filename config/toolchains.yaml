@@ -1,48 +1,43 @@
 # Toolchains: arbitrary N CUDA toolkits.
 # runnable: whether this toolkit's CUBIN (and PTX-JIT) can execute on the host driver.
-#   On this machine the driver UMD is 12.1; CUDA 13.x cubins and PTX ISA 8.5+ are rejected,
-#   so 13.0/13.3 are compile+analyze only.  `pipeline probe` recomputes these flags.
 #
-# `arch` is the target GPU architecture (sm_86 == RTX 2050, Ampere).
+# `arch` is the target GPU architecture.  This machine has a GeForce RTX 2080
+# (compute capability 7.5 => sm_75, Turing) and the host driver is 515.65
+# (CUDA 11.7), which load+runs sm_75 CUBINs from all three toolkits below.
+#
+# Three toolkits are spread across the CUDA 10.x -> 11.x generations on purpose,
+# to maximize the SASS/ptxas differential.  cuda-10.1 predates `-std=c++17`, so
+# the standalone checksum harness is compiled as C++14 (see pipeline/compiler.py)
+# and cuda-10.1 uses the bundled gcc-8 host compiler (newer gcc is unsupported).
 toolchains:
-  - id: cuda-11.3
-    root: /usr/local/cuda-11.3
-    nvcc: /usr/local/cuda-11.3/bin/nvcc
-    ptxas: /usr/local/cuda-11.3/bin/ptxas
-    nvdisasm: /usr/local/cuda-11.3/bin/nvdisasm
-    cuobjdump: /usr/local/cuda-11.3/bin/cuobjdump
-    arch: sm_86
-    ccbin: /usr/bin/gcc-8
+  - id: cuda-10.1
+    root: /export/d3/xzhanglb/nvcc-toolkit/cuda-10-1
+    nvcc: /export/d3/xzhanglb/nvcc-toolkit/cuda-10-1/bin/nvcc
+    ptxas: /export/d3/xzhanglb/nvcc-toolkit/cuda-10-1/bin/ptxas
+    nvdisasm: /export/d3/xzhanglb/nvcc-toolkit/cuda-10-1/bin/nvdisasm
+    cuobjdump: /export/d3/xzhanglb/nvcc-toolkit/cuda-10-1/bin/cuobjdump
+    arch: sm_75
+    ccbin: /export/d3/xzhanglb/nvcc-toolkit/gcc-8/usr/bin/g++-8
+    runnable: true
+
+  - id: cuda-11.4
+    root: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-4
+    nvcc: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-4/bin/nvcc
+    ptxas: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-4/bin/ptxas
+    nvdisasm: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-4/bin/nvdisasm
+    cuobjdump: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-4/bin/cuobjdump
+    arch: sm_75
+    ccbin: /usr/bin/g++-9
     runnable: true
 
   - id: cuda-11.8
-    root: /usr/local/cuda-11.8
-    nvcc: /usr/local/cuda-11.8/bin/nvcc
-    ptxas: /usr/local/cuda-11.8/bin/ptxas
-    nvdisasm: /usr/local/cuda-11.8/bin/nvdisasm
-    cuobjdump: /usr/local/cuda-11.8/bin/cuobjdump
-    arch: sm_86
-    ccbin: /usr/bin/gcc-8
-    runnable: true
-
-  - id: cuda-12.1
-    root: /usr/local/cuda-12.1
-    nvcc: /usr/local/cuda-12.1/bin/nvcc
-    ptxas: /usr/local/cuda-12.1/bin/ptxas
-    nvdisasm: /usr/local/cuda-12.1/bin/nvdisasm
-    cuobjdump: /usr/local/cuda-12.1/bin/cuobjdump
-    arch: sm_86
-    ccbin: /usr/bin/gcc-11
-    runnable: true
-
-  - id: cuda-12.6
-    root: /usr/local/cuda-12.6
-    nvcc: /usr/local/cuda-12.6/bin/nvcc
-    ptxas: /usr/local/cuda-12.6/bin/ptxas
-    nvdisasm: /usr/local/cuda-12.6/bin/nvdisasm
-    cuobjdump: /usr/local/cuda-12.6/bin/cuobjdump
-    arch: sm_86
-    ccbin: /usr/bin/gcc-11
+    root: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-8
+    nvcc: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-8/bin/nvcc
+    ptxas: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-8/bin/ptxas
+    nvdisasm: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-8/bin/nvdisasm
+    cuobjdump: /export/d3/xzhanglb/nvcc-toolkit/cuda-11-8/bin/cuobjdump
+    arch: sm_75
+    ccbin: /usr/bin/g++-9
     runnable: true
 
 
@@ -50,8 +45,11 @@ toolchains:
 # accepted on every toolkit but produces SASS byte-identical to O3 (O4 is an alias of O3,
 # not a real optimization level).  The framework supports arbitrary M profiles; only real,
 # behaviorally distinct ones belong here.
+#
+# O3 is likewise omitted: the doctor probe showed -O3 emits SASS byte-identical to -O2 on
+# all three toolkits (cuda-10.1/11.4/11.8), so it only adds a redundant ptxas + cuobjdump
+# per build.  The real, behaviorally distinct levels are O0/O1/O2.
 optimization_profiles:
   - { name: O0, ptxas_opt: 0 }
   - { name: O1, ptxas_opt: 1 }
   - { name: O2, ptxas_opt: 2 }
-  - { name: O3, ptxas_opt: 3 }

@@ -19,8 +19,8 @@ generation:
   oracle_workers: 8
 
 compilation:
-  jobs_compile: 8            # bounded worker pool for nvcc/ptxas subprocesses
-  jobs_disasm: 8
+  jobs_compile: 32           # bounded worker pool for nvcc/ptxas subprocesses (64-core host)
+  jobs_disasm: 16
   jobs_generate: 4
   compile_timeout: 120
   ptx_timeout: 60
@@ -39,6 +39,7 @@ execution:
   # kills the worker immediately so a poisoned context cannot spread.
   runner_restart_after: 100
   device_memory_guard_words: 8
+  run_backlog_target: 64     # backpressure: stop compiling when ready_to_run reaches this
 
 oracle:
   comparison_policy: exact_u64

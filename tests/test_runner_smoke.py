@@ -15,7 +15,13 @@ from pipeline.executor import run_build, _close_persistent_runners
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / "native" / "cuda_runner"
-NVCC = shutil.which("nvcc") or "/usr/local/cuda-12.6/bin/nvcc"
+# Use the newest configured toolkit (supports the system gcc and C++17); older
+# toolkits like cuda-10.1 need gcc-8 and C++14 and would fail these tests.
+_cfg = load_config()
+_tc = _cfg.toolchains[-1] if _cfg.toolchains else None
+NVCC = shutil.which("nvcc") or (_tc.nvcc if _tc else "/usr/local/cuda/bin/nvcc")
+ARCH = _tc.arch if _tc else "sm_75"
+CCBIN = _tc.ccbin if _tc else "/usr/bin/gcc"
 
 
 def _gpu_available():
@@ -35,16 +41,16 @@ def test_runner_blob_and_oracle(tmp_path):
     case = reg.get("integer_chain").generate(
         20260810, 11, {"chain_len": 64, "use_mulhi": True, "use_funnelshift": True,
                        "use_bfe_bfi": True, "use_prmt": True, "use_lop3": True,
-                       "boundary_words": 8}, "1.0.0", "sm_86")
+                       "boundary_words": 8}, "1.0.0", ARCH)
     src = tmp_path / "test.cu"
     src.write_text(case.source)
     (tmp_path / "input.bin").write_bytes(case.input_bytes)
     ptx = tmp_path / "k.ptx"
-    r = subprocess.run([NVCC, "-arch=sm_86", "-ptx", "-o", str(ptx), str(src)],
+    r = subprocess.run([NVCC, f"-arch={ARCH}", "-ptx", "-o", str(ptx), str(src)],
                        capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, r.stderr
     cubin = tmp_path / "k.cubin"
-    r = subprocess.run([NVCC, "-arch=sm_86", "-cubin", "-Xptxas=-O3",
+    r = subprocess.run([NVCC, f"-arch={ARCH}", "-cubin", "-Xptxas=-O3",
                         "-o", str(cubin), str(src)], capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, r.stderr
 
@@ -83,12 +89,12 @@ def test_inline_ptx_roundtrip(tmp_path):
     case = strat.generate(
         20260810, 4242,
         {"n_instr": 80, "n_regs32": 8, "n_regs64": 5, "n_preds": 4,
-         "use_rare_ops": True, "use_immediates": True}, "1.0.0", "sm_86")
+         "use_rare_ops": True, "use_immediates": True}, "1.0.0", ARCH)
     src = tmp_path / "test.cu"
     src.write_text(case.source)
     (tmp_path / "input.bin").write_bytes(case.input_bytes)
     cubin = tmp_path / "k.cubin"
-    r = subprocess.run([NVCC, "-arch=sm_86", "-cubin", "-Xptxas=-O2",
+    r = subprocess.run([NVCC, f"-arch={ARCH}", "-cubin", "-Xptxas=-O2",
                         "-o", str(cubin), str(src)], capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, r.stderr
     out = tmp_path / "out.bin"
@@ -120,10 +126,10 @@ def test_runner_detects_oob(tmp_path):
         '  o[tid + 100u] = s ^ tid;\n'   # beyond the 128-word meaningful region + guards
         '}\n')
     ptx = tmp_path / "oob.ptx"
-    subprocess.run([NVCC, "-arch=sm_86", "-ptx", "-o", str(ptx), str(src)],
+    subprocess.run([NVCC, f"-arch={ARCH}", "-ptx", "-o", str(ptx), str(src)],
                    capture_output=True, timeout=180, check=True)
     cubin = tmp_path / "oob.cubin"
-    subprocess.run([NVCC, "-arch=sm_86", "-cubin", "-Xptxas=-O3", "-o", str(cubin), str(src)],
+    subprocess.run([NVCC, f"-arch={ARCH}", "-cubin", "-Xptxas=-O3", "-o", str(cubin), str(src)],
                    capture_output=True, timeout=180, check=True)
     (tmp_path / "in.bin").write_bytes(bytes(256 * 8))
     run = subprocess.run([str(RUNNER), "--cubin", str(cubin), "--kernel", "test_kernel",
@@ -145,7 +151,7 @@ def test_generator_ir_driver_checksum_matches_runtime_harness(tmp_path):
         101, 202, {
             "template": "map_transform", "complexity": "low",
             "amplify_iters": 1, "codegen": False,
-        }, "1.0.0", "sm_86")
+        }, "1.0.0", ARCH)
     test_dir = tmp_path / "case"
     build = test_dir / "builds" / "cuda-test__O3"
     build.mkdir(parents=True)
@@ -159,11 +165,11 @@ def test_generator_ir_driver_checksum_matches_runtime_harness(tmp_path):
     ptxas = str(Path(root) / "bin" / "ptxas")
     ptx = build / "kernel.ptx"
     compiled = subprocess.run(
-        [NVCC, "-arch=sm_86", "-std=c++17", "-ptx", "-o", str(ptx), str(src)],
+        [NVCC, f"-arch={ARCH}", "-std=c++17", "-ptx", "-o", str(ptx), str(src)],
         capture_output=True, text=True, timeout=180)
     assert compiled.returncode == 0, compiled.stderr
     assembled = subprocess.run(
-        [ptxas, "-arch=sm_86", "-O3", "-o", str(build / "kernel.cubin"), str(ptx)],
+        [ptxas, f"-arch={ARCH}", "-O3", "-o", str(build / "kernel.cubin"), str(ptx)],
         capture_output=True, text=True, timeout=180)
     assert assembled.returncode == 0, assembled.stderr
 
@@ -173,7 +179,7 @@ def test_generator_ir_driver_checksum_matches_runtime_harness(tmp_path):
         id="cuda-test", root=root, nvcc=NVCC, ptxas=ptxas,
         nvdisasm=str(Path(root) / "bin" / "nvdisasm"),
         cuobjdump=str(Path(root) / "bin" / "cuobjdump"),
-        arch="sm_86", ccbin="/usr/bin/gcc", runnable=True)
+        arch=ARCH, ccbin=CCBIN, runnable=True)
     first = run_build(cfg, tc, case, build, 1)
     second = run_build(cfg, tc, case, build, 2)
     assert first.status == second.status == "OK"
@@ -182,7 +188,7 @@ def test_generator_ir_driver_checksum_matches_runtime_harness(tmp_path):
 
     exe = tmp_path / "reference.exe"
     linked = subprocess.run(
-        [NVCC, "-arch=sm_86", "-std=c++17", "-O2", "-Xptxas", "-O3",
+        [NVCC, f"-arch={ARCH}", "-std=c++17", "-O2", "-Xptxas", "-O3",
          "-o", str(exe), str(src)], capture_output=True, text=True, timeout=180)
     assert linked.returncode == 0, linked.stderr
     reference = subprocess.run([str(exe)], capture_output=True, text=True, timeout=120)

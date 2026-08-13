@@ -43,7 +43,7 @@ def _make_config(args) -> Config:
 def cmd_doctor(args) -> int:
     cfg = _make_config(args)
     probes = probe.probe_all(cfg) if args.force else probe.cached_probes(cfg, force=args.force)
-    gpu = probe.get_gpu_info()
+    gpu = probe.get_gpu_info(cfg)
     print(probe.doctor_report(cfg, probes, gpu))
     return 0
 
@@ -88,7 +88,7 @@ def _target_sm(config: Config) -> str:
         return str(configured)
     if config.toolchains:
         return str(config.toolchains[0].arch)
-    return "sm_86"
+    return "sm_75"
 
 
 def _regenerate(case: GeneratedCase) -> GeneratedCase:

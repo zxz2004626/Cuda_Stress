@@ -8,7 +8,7 @@
 # CUctxCreateParams signature, but the runner only needs the stable Driver API surface
 # exposed by e.g. the 12.6 header.  Link still goes against the system driver libcuda.
 
-CUDA_ROOT ?= /usr/local/cuda-12.6
+CUDA_ROOT ?= /usr/local/cuda-11.7
 CXX       ?= g++
 CXXFLAGS  ?= -O2 -std=c++14 -Wall -Wextra -I$(CUDA_ROOT)/include
 LDFLAGS   ?= -L/usr/lib/x86_64-linux-gnu -lcuda -lpthread

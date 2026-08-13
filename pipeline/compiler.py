@@ -82,7 +82,7 @@ def nvcc_standalone_ptx(tc: Toolchain, src_path: Path, out_ptx: Path,
     """Best-effort PTX extraction for a complete CUDA Runtime program."""
     env = isolated_env(tc)
     argv = [tc.nvcc, f"-arch={tc.arch}", "-ccbin", tc.ccbin,
-            "-std=c++17", "-ptx", "-o", str(out_ptx), str(src_path)]
+            "-std=c++14", "-ptx", "-o", str(out_ptx), str(src_path)]
     return _exec(argv, env, timeout or DEFAULT_TIMEOUT)
 
 
@@ -97,7 +97,7 @@ def nvcc_standalone_executable(tc: Toolchain, profile: OptimizationProfile,
     """
     env = isolated_env(tc)
     argv = [tc.nvcc, f"-arch={tc.arch}", "-ccbin", tc.ccbin,
-            "-std=c++17", "-O2",
+            "-std=c++14", "-O2",
             "-Xptxas", f"-O{profile.ptxas_opt}",
             "-Xptxas", "-v"]
     for flag in extra_flags or []:

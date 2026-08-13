@@ -129,17 +129,38 @@ def load_config(config_path: Optional[str] = None,
     )
 
 
+def _host_compiler_lib_dir(ccbin: str) -> str:
+    """Directory holding the host compiler's runtime support libraries.
+
+    A relocated GCC install (e.g. the bundled gcc-8 under nvcc-toolkit) keeps
+    its dependencies such as libisl under ``<prefix>/lib/<triplet>``, and its
+    ``cc1plus`` needs that directory on the loader path.  Deriving it from the
+    ccbin path also covers the system gcc, where the directory is already a
+    default loader directory (a harmless duplicate).
+    """
+    prefix = Path(ccbin).parent.parent
+    for sub in ("lib/x86_64-linux-gnu", "lib64", "lib"):
+        d = prefix / sub
+        if d.is_dir():
+            return str(d)
+    return ""
+
+
 def isolated_env(toolchain: Toolchain, extra_path: Optional[str] = None) -> Dict[str, str]:
     """Clean, isolated environment for one nvcc/ptxas invocation.
 
     Pins the toolkit as CUDA_HOME/CUDA_PATH, drops unrelated LD_LIBRARY_PATH pollution and
     forces the host compiler so cross-toolkit runs are reproducible.
     """
+    lib_paths = [f"{Path(toolchain.root) / 'lib64'}", f"{Path(toolchain.root) / 'lib'}"]
+    cc_lib = _host_compiler_lib_dir(toolchain.ccbin)
+    if cc_lib:
+        lib_paths.insert(0, cc_lib)
     env = {
         "PATH": f"{Path(toolchain.root) / 'bin'}:{os.environ.get('PATH', '')}",
         "CUDA_HOME": toolchain.root,
         "CUDA_PATH": toolchain.root,
-        "LD_LIBRARY_PATH": f"{Path(toolchain.root) / 'lib64'}:{Path(toolchain.root) / 'lib'}",
+        "LD_LIBRARY_PATH": ":".join(lib_paths),
         "HOME": os.environ.get("HOME", "/home/linux"),
         "NVCC_PREPEND_INCLUDE": os.environ.get("NVCC_PREPEND_INCLUDE", ""),
         "LANG": "C",
