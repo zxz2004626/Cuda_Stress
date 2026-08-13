@@ -16,7 +16,7 @@ execution:
   gpu_devices: []
   gpu_workers_per_device: 1
   run_timeout: 60
-  runner_restart_after: 0
+  runner_restart_after: 100
   runs_per_build: 3
 generation:
   backlog_target: 64

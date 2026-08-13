@@ -30,14 +30,21 @@ class CudaEmitter(BaseEmitter):
                 self.struct(d)
                 self.w.blank()
 
-        for d in program.decls:
-            if isinstance(d, Declare):
+        top_level_decls = [d for d in program.decls if isinstance(d, Declare)]
+        if top_level_decls:
+            # Stable unmangled names let the Driver API initialize module
+            # globals with cuModuleGetGlobal.
+            self.w.line('extern "C" {')
+            self.w.kx_indent()
+            for d in top_level_decls:
                 self.stmt(d)
+            self.w.kx_dedent()
+            self.w.line("}")
         if any(isinstance(d, Declare) for d in program.decls):
             self.w.blank()
 
         if cfg.needs_constant_mem:
-            self.w.line("__constant__ unsigned int _cmem[256];")
+            self.w.line('extern "C" __constant__ unsigned int _cmem[256];')
             self.w.blank()
 
         for d in program.decls:
@@ -56,6 +63,12 @@ class CudaEmitter(BaseEmitter):
                         type_name=self.type_name).emit(kernel, program)
 
         return self.w.text()
+
+    def signature(self, f: Func) -> str:
+        sig = super().signature(f)
+        if f.kx_is_kernel():
+            return 'extern "C" ' + sig
+        return sig
 
     # -- headers -------------------------------------------------------------
 

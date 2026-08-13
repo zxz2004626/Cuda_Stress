@@ -43,7 +43,8 @@ def test_strategy_generates_deterministically(cls):
         assert len(c1.expected_bytes) == c1.total_threads() * c1.output_words_per_thread * 8
     else:
         assert c1.expected_bytes == b""
-        assert c1.execution_mode == "standalone_checksum"
+        assert c1.execution_mode == "driver_checksum"
+        assert c1.execution_spec["kind"] == "generator_ir_checksum"
         assert c1.source.count("<<<grid, block") == 1
 
 
@@ -72,6 +73,7 @@ def test_manifest_roundtrip(cls):
     assert back.kernel_seed == case.kernel_seed
     assert back.execution_mode == case.execution_mode
     assert back.oracle_mode == case.oracle_mode
+    assert back.execution_spec == case.execution_spec
 
 
 def test_register_pressure_maxrregcount_flag():

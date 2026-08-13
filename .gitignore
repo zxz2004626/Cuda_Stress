@@ -1,6 +1,6 @@
 **/__pycache__
-pipeline/__pycache__
-generator/__pycache__
-generator/strategies/__pycache__
-tools/__pycache__
+pipeline/__pycache__/*
+generator/__pycache__/*
+generator/strategies/__pycache__/*
+tools/__pycache__/*
 runs/

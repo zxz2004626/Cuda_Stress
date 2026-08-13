@@ -18,8 +18,9 @@ Output contract (parsed by generator_ir.run):
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 from generator_ir.ir.typedecl import (
     GType, TPointer, TFloat, TDouble, THalf, TBF16, TBool, TChar, TSChar,
@@ -122,6 +123,52 @@ def _scalar_arg_literal(t: GType, idx: int) -> str:
     return str(seed)
 
 
+def _scalar_arg_bytes(t: GType, idx: int) -> bytes:
+    """Encode the fixed host-harness scalar as CUDA launch-parameter bytes.
+
+    Keeping this next to ``_scalar_arg_literal`` makes the Runtime and Driver
+    harnesses share one deterministic argument contract.  All generated
+    scalar values are finite, so Python's IEEE conversions match the CUDA
+    round-to-nearest intrinsics used by the emitted host code.
+    """
+    seed = idx * 7 + 42
+    if isinstance(t, TSChar):
+        return struct.pack("<b", ((seed * 37) % 255) - 128)
+    if isinstance(t, TChar):
+        return struct.pack("<B", (seed * 37) % 256)
+    if isinstance(t, TShort):
+        return struct.pack("<h", ((seed * 2654435761) % 65535) - 32768)
+    if isinstance(t, TUShort):
+        return struct.pack("<H", (seed * 2654435761) % 65536)
+    if isinstance(t, TInt):
+        return struct.pack("<i", (seed * 2654435761) % 2147483647)
+    if isinstance(t, TUInt):
+        return struct.pack("<I", (seed * 2654435761) % 4294967295)
+    if isinstance(t, TLong):
+        return struct.pack("<q", (seed * 6364136223846793005) % 9223372036854775807)
+    if isinstance(t, TULong):
+        return struct.pack("<Q", (seed * 6364136223846793005) % 18446744073709551615)
+    if isinstance(t, TFloat):
+        value = float(f"{(((seed * 1103515245 + 12345) % 2000) / 64.0 - 15.0):.6f}")
+        return struct.pack("<f", value)
+    if isinstance(t, TDouble):
+        value = float(f"{(((seed * 1103515245 + 12345) % 4000) / 32.0 - 60.0):.6f}")
+        return struct.pack("<d", value)
+    if isinstance(t, THalf):
+        value = float(f"{(((seed * 1103515245 + 12345) % 2000) / 64.0 - 15.0):.6f}")
+        value = struct.unpack("<f", struct.pack("<f", value))[0]
+        return struct.pack("<e", value)
+    if isinstance(t, TBF16):
+        value = float(f"{(((seed * 1103515245 + 12345) % 4000) / 32.0 - 60.0):.6f}")
+        bits = struct.unpack("<I", struct.pack("<f", value))[0]
+        # CUDA __float2bfloat16 uses round-to-nearest-even.
+        rounded = (bits + 0x7FFF + ((bits >> 16) & 1)) & 0xFFFFFFFF
+        return struct.pack("<H", rounded >> 16)
+    if isinstance(t, TBool):
+        return struct.pack("<B", 1 if (seed % 2) else 0)
+    raise TypeError(f"unsupported generator_ir scalar parameter type {t!r}")
+
+
 def _dim3(dims, name: str) -> str:
     x, y, z = dims
     if y == 1 and z == 1:
@@ -143,42 +190,110 @@ class HostHarness:
 
     # -- argument mapping ----------------------------------------------------
 
-    def kernel_args(self, kernel: Func) -> str:
-        """Map kernel params to host variables; extra scalars get fixed values."""
+    def _parameter_bindings(self, kernel: Func) -> List[Tuple[str, Any, int]]:
+        """Return (role, parameter, scalar-index) in kernel ABI order."""
         params = kernel.params
         if not params:
-            return "d_output, d_input, n"
-        args: List[str] = []
+            raise ValueError("generator_ir Driver mode requires explicit kernel parameters")
+        bindings: List[Tuple[str, Any, int]] = []
         have_out = have_in = have_n = False
         scalar_idx = 0
         for p in params:
             pt, pn = p.gtype, p.name.lower()
             if isinstance(pt, TPointer):
                 if p.name == "output_fp":
-                    args.append("d_output_fp")
+                    role = "output_fp"
                 elif not have_out and ("out" in pn or "result" in pn or "dst" in pn):
-                    args.append("d_output")
+                    role = "output"
                     have_out = True
                 elif not have_in and ("in" in pn or "src" in pn or "data" in pn):
-                    args.append("d_input")
+                    role = "input"
                     have_in = True
                 elif not have_out:
-                    args.append("d_output")
+                    role = "output"
                     have_out = True
                 elif not have_in:
-                    args.append("d_input")
+                    role = "input"
                     have_in = True
                 else:
-                    args.append("d_input")
+                    role = "input"
+                bindings.append((role, p, -1))
+            elif not have_n:
+                bindings.append(("n", p, -1))
+                have_n = True
             else:
-                if not have_n:
-                    args.append("n")
-                    have_n = True
-                else:
-                    args.append(_scalar_arg_literal(pt, scalar_idx))
-                    scalar_idx += 1
+                bindings.append(("scalar", p, scalar_idx))
+                scalar_idx += 1
+        return bindings
+
+    def kernel_args(self, kernel: Func) -> str:
+        """Map kernel params to host variables; extra scalars get fixed values."""
+        args: List[str] = []
+        for role, p, scalar_idx in self._parameter_bindings(kernel):
+            if role == "output":
+                args.append("d_output")
+            elif role == "input":
+                args.append("d_input")
+            elif role == "output_fp":
+                args.append("d_output_fp")
+            elif role == "n":
+                args.append("n")
+            else:
+                args.append(_scalar_arg_literal(p.gtype, scalar_idx))
         return ", ".join(args)
 
+    def driver_spec(self, kernel: Func, program) -> Dict[str, Any]:
+        """Materialize the variable CUDA kernel ABI for the native runner."""
+        from generator_ir.ir.statements import Declare
+        from generator_ir.ir.typedecl import TArray, MemSpace, Qual
+
+        n = int(self.cfg.n_elements) if self.cfg.n_elements > 0 else max(
+            self.cfg.threads_per_block * self.cfg.block_count, 1024)
+        buf_size = n * n if self.cfg.kx_is_2d else n
+        in_size = buf_size * max(1, int(self.cfg.input_size_mult))
+        args: List[Dict[str, Any]] = []
+        for role, p, scalar_idx in self._parameter_bindings(kernel):
+            if role == "scalar":
+                raw = _scalar_arg_bytes(p.gtype, scalar_idx)
+                args.append({
+                    "kind": "scalar", "name": p.name,
+                    "type": p.gtype.spelling(), "data_hex": raw.hex(),
+                })
+            elif role == "output_fp":
+                if not isinstance(p.gtype, TPointer) or p.gtype.base.width not in (4, 8):
+                    raise ValueError(f"unsupported output_fp parameter {p.gtype!r}")
+                args.append({
+                    "kind": role, "name": p.name,
+                    "element_bytes": p.gtype.base.width,
+                })
+            else:
+                args.append({"kind": role, "name": p.name})
+
+        globals_spec: List[Dict[str, Any]] = []
+        for d in program.decls:
+            if not (isinstance(d, Declare) and isinstance(d.gtype, TArray)):
+                continue
+            if d.space in (MemSpace.GLOBAL, MemSpace.GENERIC) or Qual.DEVICE in d.quals:
+                globals_spec.append({"name": d.name, "init": "zero"})
+        if self.cfg.needs_constant_mem:
+            globals_spec.append({"name": "_cmem", "init": "cmem_u32"})
+
+        return {
+            "version": 1,
+            "kind": "generator_ir_checksum",
+            "kernel": kernel.name,
+            "args": args,
+            "globals": globals_spec,
+            "grid": list(self.cfg.grid),
+            "block": list(self.cfg.block),
+            "shared_bytes": int(self.cfg.shared_bytes),
+            "n": n,
+            "buf_size": buf_size,
+            "in_size": in_size,
+            "input_distribution": self.cfg.input_dist if self.cfg.input_dist in _INPUT_INIT else "hash",
+            "output_element_bytes": 4,
+            "checksum": "boost_u32",
+        }
     def _fp_param(self, kernel: Func):
         for p in kernel.params:
             if p.name == "output_fp" and isinstance(p.gtype, TPointer):
@@ -404,3 +519,8 @@ class HostHarness:
         """Delegate to timing_modes.harness_clock64_mode."""
         from generator_ir.emit.timing_modes import harness_clock64_mode
         harness_clock64_mode(self.w, self.api, launch)
+
+
+def cuda_driver_spec(program, kernel: Func) -> Dict[str, Any]:
+    """Public adapter used by the pipeline's generator_ir strategy."""
+    return HostHarness(SourceWriter(), CUDA_API, program.launch).driver_spec(kernel, program)

@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from generator.base import default_registry
+from pipeline.config import Toolchain, load_config
+from pipeline.executor import run_build, _close_persistent_runners
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / "native" / "cuda_runner"
@@ -135,3 +137,57 @@ def test_runner_detects_oob(tmp_path):
     # Either the launch faults (CUDA_ERROR) or the guard catches it (exit 2). Both prove
     # the runner does not silently return garbage.
     assert run.returncode in (1, 2)
+
+
+def test_generator_ir_driver_checksum_matches_runtime_harness(tmp_path):
+    """Dynamic ABI cubin path must reproduce generator_ir's Runtime checksum."""
+    case = default_registry().get("generator_ir").generate(
+        101, 202, {
+            "template": "map_transform", "complexity": "low",
+            "amplify_iters": 1, "codegen": False,
+        }, "1.0.0", "sm_86")
+    test_dir = tmp_path / "case"
+    build = test_dir / "builds" / "cuda-test__O3"
+    build.mkdir(parents=True)
+    src = test_dir / "test.cu"
+    src.write_text(case.source)
+    (test_dir / "input.bin").write_bytes(b"")
+    (test_dir / "expected.bin").write_bytes(b"")
+    (test_dir / "manifest.json").write_text(json.dumps(case.manifest()))
+
+    root = str(Path(NVCC).resolve().parent.parent)
+    ptxas = str(Path(root) / "bin" / "ptxas")
+    ptx = build / "kernel.ptx"
+    compiled = subprocess.run(
+        [NVCC, "-arch=sm_86", "-std=c++17", "-ptx", "-o", str(ptx), str(src)],
+        capture_output=True, text=True, timeout=180)
+    assert compiled.returncode == 0, compiled.stderr
+    assembled = subprocess.run(
+        [ptxas, "-arch=sm_86", "-O3", "-o", str(build / "kernel.cubin"), str(ptx)],
+        capture_output=True, text=True, timeout=180)
+    assert assembled.returncode == 0, assembled.stderr
+
+    cfg = load_config()
+    cfg.execution["runner_restart_after"] = 4
+    tc = Toolchain(
+        id="cuda-test", root=root, nvcc=NVCC, ptxas=ptxas,
+        nvdisasm=str(Path(root) / "bin" / "nvdisasm"),
+        cuobjdump=str(Path(root) / "bin" / "cuobjdump"),
+        arch="sm_86", ccbin="/usr/bin/gcc", runnable=True)
+    first = run_build(cfg, tc, case, build, 1)
+    second = run_build(cfg, tc, case, build, 2)
+    assert first.status == second.status == "OK"
+    assert first.output_words == second.output_words
+    assert first.execution["context_reused"] is True
+
+    exe = tmp_path / "reference.exe"
+    linked = subprocess.run(
+        [NVCC, "-arch=sm_86", "-std=c++17", "-O2", "-Xptxas", "-O3",
+         "-o", str(exe), str(src)], capture_output=True, text=True, timeout=180)
+    assert linked.returncode == 0, linked.stderr
+    reference = subprocess.run([str(exe)], capture_output=True, text=True, timeout=120)
+    assert reference.returncode == 0, reference.stderr
+    checksum = int(next(line.split("=", 1)[1] for line in reference.stdout.splitlines()
+                        if line.startswith("checksum=")))
+    assert first.output_words == struct.pack("<Q", checksum)
+    _close_persistent_runners()

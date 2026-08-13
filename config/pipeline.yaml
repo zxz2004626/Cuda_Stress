@@ -33,8 +33,11 @@ execution:
   gpu_workers_per_device: 1  # serial per GPU by default (isolation / determinism)
   runs_per_build: 3          # confirmation run count when adaptive_rerun is on
   adaptive_rerun: true       # fast pass runs each build once; re-run 3x only on disagreement
-  run_timeout: 60
-  runner_restart_after: 0    # 0 => fresh process per run (max isolation)
+  run_timeout: 10           # bound per-run cost: a hung kernel costs 10s, not 60s
+  # generator_ir Driver workers reuse one CUcontext for this many successful
+  # jobs.  0 keeps the legacy fresh-process behavior; any CUDA failure still
+  # kills the worker immediately so a poisoned context cannot spread.
+  runner_restart_after: 100
   device_memory_guard_words: 8
 
 oracle:

@@ -117,14 +117,20 @@ A case directory contains `test.cu`, `manifest.json`, `input.bin`, `expected.bin
 `generation.json`.  A case is a **pure function of `(config_seed, test_seed, strategy,
 params)`** — regenerate it byte-for-byte with `reproduce`.
 
-`generator_ir` cases declare `execution_mode: standalone_checksum` and
-`oracle_mode: cross_build` in the manifest.  Their generated `test.cu` includes the
-generator's own host initialization plus a checksum-only harness: a fresh process
-initializes all state, launches exactly once, and prints one `checksum=<u64>` line.
+`generator_ir` cases declare `execution_mode: driver_checksum` and
+`oracle_mode: cross_build` in the manifest.  Each CUDA toolkit independently compiles
+the source to PTX once; the toolkit's own `ptxas` then builds each optimization-profile
+cubin.  The manifest records the variable kernel ABI, launch dimensions, deterministic
+input construction, and global/constant-memory initialization.  A Driver API worker
+replays that contract, launches exactly once, and returns the same u64 checksum as the
+generated Runtime harness.  Workers reuse one `CUcontext` for the configured number of
+successful jobs and are killed immediately after any CUDA error.
+
 `input.bin` and `expected.bin` remain empty compatibility artifacts; they are never
-misrepresented as a CPU oracle.  Each build is still run repeatedly for stability,
-and stable checksum disagreement across the toolchain/profile matrix is classified as
-`POTENTIAL_COMPILER_BUG`.
+misrepresented as a CPU oracle. Each build is still run repeatedly for stability, and
+stable checksum disagreement across the toolchain/profile matrix is classified as
+`POTENTIAL_COMPILER_BUG`. Legacy archived `standalone_checksum` manifests remain
+runnable for reproduction.
 
 ## Generators (original strategies + optional IR backend)
 
@@ -136,7 +142,7 @@ and stable checksum disagreement across the toolchain/profile matrix is classifi
 | `warp_mixed`        | `__ballot`/`__any`/`__all`/`__activemask`/`__shfl*`/`__match_any`/`__match_all`, full and legal partial member masks (width-16 segments), then a long chain + store |
 | `register_pressure` | 32–128 simultaneously-live u64 values across `__noinline__`/`__forceinline__` chains, merge + reuse, `launch_bounds`/`maxrregcount` variants |
 | `inline_ptx`        | an ISA-constrained inline-PTX block (`asm volatile`) with 140+ CPU-mirrored type/modifier variants across scalar integer, bit manipulation, logic, shifts, comparisons and selection. `balanced` mode guarantees each eligible variant before repetition; `random` mode explores stochastic cross-family chains. PTX-version/SM gates, boundary immediates, 32/64-bit mixing and accumulator folds keep cases valid and optimization-relevant |
-| `generator_ir`      | optional typed-IR/template generator (`map_transform`, reductions, scans, 2D tiles, synchronization, register/ISA stress, and more); emits a complete CUDA program and uses deterministic cross-build checksum consensus rather than replacing any original strategy |
+| `generator_ir`      | optional typed-IR/template generator (`map_transform`, reductions, scans, 2D tiles, synchronization, register/ISA stress, and more); records a dynamic Driver ABI, compiles one PTX per toolkit plus profile-specific cubins, and uses deterministic cross-build checksum consensus rather than replacing any original strategy |
 
 Every original strategy has an **independent CPU oracle** (`cpu_oracle`) that mirrors the CUDA
 semantics exactly (mod-2^64 arithmetic, PTX bit ops, warp lane/member-mask rules, byte

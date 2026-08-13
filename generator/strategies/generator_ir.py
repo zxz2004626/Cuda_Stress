@@ -1,10 +1,10 @@
 """Adapter for the IR-based CUDA generator.
 
-Unlike the original strategies, generator_ir emits a complete CUDA Runtime
-program because its kernels can have variable parameter lists and may require
-host-side initialization of auxiliary/global/constant memory.  The pipeline
-therefore compiles it as a standalone executable and compares the deterministic
-checksum printed by that executable across the build matrix.
+Unlike the original strategies, generator_ir kernels have variable parameter
+lists and may require initialization of auxiliary/global/constant memory.  The
+adapter records that ABI in the manifest so the pipeline can compile one PTX
+per toolkit, assemble profile-specific cubins, and reproduce the deterministic
+checksum through the Driver API.
 """
 
 from __future__ import annotations
@@ -76,7 +76,13 @@ class GeneratorIR(Strategy):
         names = sorted(str(n) for n in templates)
         requested = raw.get("template")
         if requested in (None, "", "random"):
-            template = random.Random(ir_seed ^ 0x49525F54454D504C).choice(names)
+            # Weighted pick so PREFERENCE_TABLE (0 = never) is respected; the
+            # legacy uniform `choice` ignored the table and kept re-selecting
+            # templates that hang the GPU.
+            from generator_ir.templates.catalog import PREFERENCE_TABLE
+            rng = random.Random(ir_seed ^ 0x49525F54454D504C)
+            weights = [max(0.0, float(PREFERENCE_TABLE.get(n, 1.0))) for n in names]
+            template = rng.choices(names, weights=weights, k=1)[0]
         else:
             template = str(requested)
             if template not in names:
@@ -165,6 +171,7 @@ class GeneratorIR(Strategy):
 
         from generator_ir import __version__ as ir_version
         from generator_ir.emit.nvidia import CudaEmitter
+        from generator_ir.emit.host_harness import cuda_driver_spec
         from generator_ir.gen.assembler import build_kernel
         from generator_ir.gen.options import GenConfig
         from generator_ir.templates.catalog import kx_build_default_registry
@@ -217,6 +224,7 @@ class GeneratorIR(Strategy):
             raise ValueError("generator_ir checksum harness was not emitted")
 
         launch = program.launch
+        execution_spec = cuda_driver_spec(program, kernel)
         suffix = f"+generator_ir-{ir_version}"
         effective_version = gen_version if "+generator_ir-" in gen_version else f"{gen_version}{suffix}"
         return GeneratedCase(
@@ -228,9 +236,9 @@ class GeneratorIR(Strategy):
             generator_version=effective_version,
             kernel_seed=p["ir_seed"],
             source=source,
-            # The standalone harness owns its device buffers.  Empty artifacts
-            # preserve the common testcase-directory shape without pretending
-            # that an independent CPU oracle exists.
+            # The Driver checksum harness derives its buffers deterministically
+            # from execution_spec. Empty artifacts preserve the common testcase
+            # directory shape without pretending a CPU oracle exists.
             input_bytes=b"",
             expected_bytes=b"",
             grid=list(launch.grid),
@@ -241,11 +249,12 @@ class GeneratorIR(Strategy):
             target_sm=target_sm,
             cpu_oracle="cross_build_consensus",
             comparison_policy="cross_build_checksum_u64",
-            cuda_features=[target_sm, "generator_ir", p["template"], "standalone_checksum"],
+            cuda_features=[target_sm, "generator_ir", p["template"], "driver_checksum"],
             kernel_entry=kernel.name,
-            sanitizer_policy="standalone_harness",
-            execution_mode="standalone_checksum",
+            sanitizer_policy="driver_checksum_harness",
+            execution_mode="driver_checksum",
             oracle_mode="cross_build",
+            execution_spec=execution_spec,
         )
 
     def cpu_oracle(self, input_words: int, seed: int, params: Dict[str, Any],

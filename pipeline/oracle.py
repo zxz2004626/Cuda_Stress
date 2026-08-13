@@ -71,7 +71,7 @@ def verify_input_sensitivity(test_dir: Path, config_seed: int) -> Dict[str, Any]
 
 def verify_runtime_input_sensitivity(config, test_dir: Path,
                                      input_salt: int = 1) -> Dict[str, Any]:
-    """Re-run one stable standalone build with deterministically changed input.
+    """Re-run one stable checksum build with deterministically changed input.
 
     This is not presented as a CPU oracle.  It only verifies that the checksum
     observed by the differential pipeline actually depends on runtime input.
@@ -79,8 +79,8 @@ def verify_runtime_input_sensitivity(config, test_dir: Path,
     from . import executor
 
     case = case_from_dir(test_dir)
-    if case.execution_mode != "standalone_checksum":
-        raise ValueError("runtime input sensitivity is only defined for standalone cases")
+    if case.execution_mode not in {"standalone_checksum", "driver_checksum"}:
+        raise ValueError("runtime input sensitivity is only defined for checksum cases")
 
     for build_dir in sorted((test_dir / "builds").glob("*__*")):
         if not build_dir.is_dir():
@@ -118,7 +118,7 @@ def verify_runtime_input_sensitivity(config, test_dir: Path,
         baseline_hash = hashlib.sha256(baseline.output_words).hexdigest()
         changed_hash = hashlib.sha256(changed.output_words).hexdigest()
         result = {
-            "method": "standalone_input_salt",
+            "method": f"{case.execution_mode}_input_salt",
             "representative_build": build_dir.name,
             "input_salt": int(input_salt) & 0xFFFFFFFF,
             "input_sensitive": baseline.output_words != changed.output_words,
@@ -129,4 +129,4 @@ def verify_runtime_input_sensitivity(config, test_dir: Path,
             json.dumps(result, indent=2, sort_keys=True))
         return result
 
-    raise RuntimeError("no successful runnable standalone build for input-sensitivity check")
+    raise RuntimeError("no successful runnable checksum build for input-sensitivity check")

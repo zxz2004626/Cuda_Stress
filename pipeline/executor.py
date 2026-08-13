@@ -1,14 +1,17 @@
 """GPU execution: invoke the native Driver API runner, parse result blobs.
 
-Each run uses a fresh runner process => a poisoned CUDA context never contaminates the
-next task.  Per-device serialization is provided by DeviceGate so one GPU only executes
-one kernel at a time (determinism / no resource contention).
+Fixed-ABI and legacy standalone cases retain fresh-process isolation.  generator_ir
+checksum cases may reuse one Driver API context for a bounded number of successful
+jobs; the worker is discarded after any failure.  Per-device serialization is
+provided by DeviceGate so one GPU only executes one kernel at a time.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import re
+import select
 import struct
 import subprocess
 import threading
@@ -75,6 +78,9 @@ def run_build(config: Config, tc: Toolchain, case: GeneratedCase, build_dir: Pat
     """Run one build once on `device`, write output_run_<N>.bin + execution_run_<N>.json."""
     if case.execution_mode == "standalone_checksum":
         return _run_standalone_checksum(
+            config, tc, case, build_dir, run_index, device, timeout, input_salt)
+    if case.execution_mode == "driver_checksum":
+        return _run_driver_checksum(
             config, tc, case, build_dir, run_index, device, timeout, input_salt)
 
     runner = runner_path(config)
@@ -143,6 +149,265 @@ def run_build(config: Config, tc: Toolchain, case: GeneratedCase, build_dir: Pat
         result.error = ""
     else:
         result.error = exec_info.get("error", "")
+    return result
+
+
+class _PersistentDriverRunner:
+    """One long-lived native Driver API process/context for one GPU."""
+
+    def __init__(self, executable: Path, device: int) -> None:
+        self.executable = executable
+        self.device = int(device)
+        self._lock = threading.Lock()
+        self._proc: Optional[subprocess.Popen] = None
+        self._sequence = 0
+        self._jobs = 0
+
+    @staticmethod
+    def _readline(proc: subprocess.Popen, timeout: float) -> Optional[str]:
+        if proc.stdout is None:
+            return None
+        ready, _, _ = select.select([proc.stdout.fileno()], [], [], max(0.0, timeout))
+        if not ready:
+            return None
+        line = proc.stdout.readline()
+        return line.rstrip("\r\n") if line else None
+
+    def _start(self, timeout: float) -> None:
+        self._proc = subprocess.Popen(
+            [str(self.executable), "--server", "--device", str(self.device)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, bufsize=1)
+        line = self._readline(self._proc, max(30.0, timeout))
+        if line != "READY":
+            detail = ""
+            if self._proc.poll() is not None and self._proc.stderr is not None:
+                detail = self._proc.stderr.read()[-500:]
+            self._stop(force=True)
+            raise RuntimeError(f"persistent CUDA runner failed to start: {line!r} {detail}")
+        self._jobs = 0
+
+    def _stop(self, force: bool = False) -> None:
+        proc, self._proc = self._proc, None
+        if proc is None:
+            return
+        if proc.poll() is None and not force and proc.stdin is not None:
+            try:
+                proc.stdin.write("QUIT\n")
+                proc.stdin.flush()
+                proc.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if proc.poll() is None:
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+
+    def close(self) -> None:
+        with self._lock:
+            self._stop()
+
+    def run(self, spec_path: Path, timeout: float, restart_after: int) -> int:
+        with self._lock:
+            if self._proc is not None and self._proc.poll() is not None:
+                self._stop(force=True)
+            if self._proc is not None and restart_after > 0 and self._jobs >= restart_after:
+                self._stop()
+            if self._proc is None:
+                self._start(timeout)
+            assert self._proc is not None and self._proc.stdin is not None
+            self._sequence += 1
+            sequence = str(self._sequence)
+            try:
+                self._proc.stdin.write(f"RUN\t{sequence}\t{spec_path}\n")
+                self._proc.stdin.flush()
+            except OSError as exc:
+                self._stop(force=True)
+                raise RuntimeError(f"persistent CUDA runner write failed: {exc}") from exc
+            line = self._readline(self._proc, timeout)
+            if line is None:
+                self._stop(force=True)
+                raise subprocess.TimeoutExpired(str(self.executable), timeout)
+            fields = line.split("\t")
+            if len(fields) != 3 or fields[0] != "DONE" or fields[1] != sequence:
+                self._stop(force=True)
+                raise RuntimeError(f"invalid persistent CUDA runner response: {line!r}")
+            try:
+                status = int(fields[2])
+            except ValueError as exc:
+                self._stop(force=True)
+                raise RuntimeError(f"invalid persistent CUDA runner status: {line!r}") from exc
+            self._jobs += 1
+            if status != EXIT_OK:
+                # The native server exits after any failing job; discard the
+                # potentially poisoned context even if it has not exited yet.
+                self._stop(force=True)
+            return status
+
+
+_PERSISTENT_RUNNERS: Dict[tuple, _PersistentDriverRunner] = {}
+_PERSISTENT_RUNNERS_LOCK = threading.Lock()
+
+
+def _persistent_runner(executable: Path, device: int) -> _PersistentDriverRunner:
+    key = (str(executable.resolve()), int(device))
+    with _PERSISTENT_RUNNERS_LOCK:
+        runner = _PERSISTENT_RUNNERS.get(key)
+        if runner is None:
+            runner = _PersistentDriverRunner(executable, device)
+            _PERSISTENT_RUNNERS[key] = runner
+        return runner
+
+
+def _close_persistent_runners() -> None:
+    with _PERSISTENT_RUNNERS_LOCK:
+        runners = list(_PERSISTENT_RUNNERS.values())
+        _PERSISTENT_RUNNERS.clear()
+    for runner in runners:
+        runner.close()
+
+
+atexit.register(_close_persistent_runners)
+
+
+def _clean_spec_value(value: Any, field: str) -> str:
+    text = str(value)
+    if "\n" in text or "\r" in text:
+        raise ValueError(f"{field} contains a newline")
+    return text
+
+
+def _write_driver_job_spec(config: Config, case: GeneratedCase, build_dir: Path,
+                           run_index: Any, input_salt: int) -> Path:
+    spec = case.execution_spec
+    if not isinstance(spec, dict) or spec.get("kind") != "generator_ir_checksum":
+        raise ValueError("generator_ir Driver execution_spec is missing or unsupported")
+    required = ("kernel", "args", "grid", "block", "n", "buf_size", "in_size")
+    missing = [name for name in required if name not in spec]
+    if missing:
+        raise ValueError(f"generator_ir Driver execution_spec missing {missing}")
+
+    out_path = build_dir / f"output_run_{run_index}.bin"
+    result_path = build_dir / f"execution_run_{run_index}.json"
+    lines = [
+        "version=1",
+        f"cubin={_clean_spec_value(build_dir / 'kernel.cubin', 'cubin')}",
+        f"kernel={_clean_spec_value(spec['kernel'], 'kernel')}",
+        f"output={_clean_spec_value(out_path, 'output')}",
+        f"result={_clean_spec_value(result_path, 'result')}",
+        f"test_id={_clean_spec_value(case.case_id(), 'test_id')}",
+        "grid=" + ",".join(str(int(x)) for x in spec["grid"]),
+        "block=" + ",".join(str(int(x)) for x in spec["block"]),
+        f"shared_bytes={int(spec.get('shared_bytes', 0))}",
+        f"n={int(spec['n'])}",
+        f"buf_size={int(spec['buf_size'])}",
+        f"in_size={int(spec['in_size'])}",
+        f"input_dist={_clean_spec_value(spec.get('input_distribution', 'hash'), 'input_dist')}",
+        f"input_salt={int(input_salt) & 0xFFFFFFFF}",
+        f"guards={int(config.execution.get('device_memory_guard_words', 8))}",
+    ]
+    for arg in spec["args"]:
+        kind = str(arg.get("kind", ""))
+        if kind == "scalar":
+            payload = str(arg.get("data_hex", ""))
+            if not re.fullmatch(r"[0-9a-fA-F]+", payload) or len(payload) % 2:
+                raise ValueError(f"invalid scalar parameter encoding for {arg.get('name')}")
+            lines.append(f"arg=scalar:{payload}")
+        elif kind == "output_fp":
+            lines.append(f"arg=output_fp:{int(arg['element_bytes'])}")
+        elif kind in {"output", "input", "n"}:
+            lines.append(f"arg={kind}")
+        else:
+            raise ValueError(f"unsupported generator_ir Driver arg kind {kind!r}")
+    for global_spec in spec.get("globals", []):
+        init = _clean_spec_value(global_spec.get("init", ""), "global init")
+        name = _clean_spec_value(global_spec.get("name", ""), "global name")
+        if init not in {"zero", "cmem_u32"} or not name:
+            raise ValueError(f"unsupported generator_ir global spec {global_spec!r}")
+        lines.append(f"global={init}:{name}")
+
+    path = build_dir / f"driver_job_{run_index}.spec"
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def _run_driver_checksum(config: Config, tc: Toolchain,
+                         case: GeneratedCase, build_dir: Path,
+                         run_index: Any, device: int,
+                         timeout: Optional[float], input_salt: int) -> RunResult:
+    """Run a generator_ir cubin through its recorded dynamic Driver ABI."""
+    runner = runner_path(config)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    cubin = build_dir / "kernel.cubin"
+    out_path = build_dir / f"output_run_{run_index}.bin"
+    exec_path = build_dir / f"execution_run_{run_index}.json"
+    out_path.unlink(missing_ok=True)
+    exec_path.unlink(missing_ok=True)
+    if not cubin.exists():
+        return RunResult(status="BAD_SPEC", output_words=None, error="cubin missing")
+    try:
+        spec_path = _write_driver_job_spec(config, case, build_dir, run_index, input_salt)
+    except (KeyError, TypeError, ValueError) as exc:
+        info = {"status": "BAD_SPEC", "returncode": EXIT_BAD_SPEC, "error": str(exc)}
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="BAD_SPEC", output_words=None, error=str(exc), execution=info)
+
+    limit = float(timeout or config.execution.get("run_timeout", 60))
+    restart_after = int(config.execution.get("runner_restart_after", 0))
+    try:
+        if restart_after > 0:
+            returncode = _persistent_runner(runner, device).run(
+                spec_path, limit, restart_after)
+        else:
+            proc = subprocess.run(
+                [str(runner), "--ir-spec", str(spec_path), "--device", str(device)],
+                capture_output=True, text=True, timeout=limit)
+            returncode = proc.returncode
+    except subprocess.TimeoutExpired:
+        info = {"status": "TIMEOUT", "returncode": EXIT_TIMEOUT,
+                "elapsed_us": int(limit * 1_000_000),
+                "error": f"driver checksum runner timed out after {limit}s"}
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="TIMEOUT", output_words=None, error=info["error"],
+                         elapsed_us=info["elapsed_us"], execution=info)
+    except (OSError, RuntimeError) as exc:
+        info = {"status": "CUDA_ERROR", "returncode": EXIT_CUDA_ERROR,
+                "error": str(exc)}
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="CUDA_ERROR", output_words=None,
+                         error=str(exc), execution=info)
+    finally:
+        spec_path.unlink(missing_ok=True)
+
+    exec_info: Dict[str, Any] = {}
+    if exec_path.exists():
+        try:
+            exec_info = json.loads(exec_path.read_text())
+        except Exception:  # noqa: BLE001
+            exec_info = {"status": "PARSE_ERR"}
+    if returncode != EXIT_OK and not out_path.exists():
+        status = {EXIT_TIMEOUT: "TIMEOUT", EXIT_OOB: "OUT_OF_BOUNDS_WRITE",
+                  EXIT_BAD_SPEC: "BAD_SPEC"}.get(returncode, "CUDA_ERROR")
+        return RunResult(status=status, output_words=None,
+                         error=exec_info.get("error", f"runner exited {returncode}"),
+                         elapsed_us=int(exec_info.get("elapsed_us", 0)),
+                         execution=exec_info)
+    try:
+        result = parse_output_blob(out_path.read_bytes())
+    except OSError as exc:
+        return RunResult(status="CUDA_ERROR", output_words=None, error=str(exc),
+                         execution=exec_info)
+    result.execution = exec_info
+    result.elapsed_us = int(exec_info.get("elapsed_us", 0))
+    result.error = "" if result.status == "OK" else exec_info.get("error", "")
     return result
 
 

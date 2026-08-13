@@ -4,4 +4,4 @@ Random kernel generation, opt/deopt mutations, and cross-compiler
 ratio-of-ratios differential testing for CUDA and HIP.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

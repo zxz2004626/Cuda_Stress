@@ -28,6 +28,16 @@ from generator.base import GeneratedCase, default_registry
 from generator.rng import rng_for
 
 
+_PTX_LOCKS: Dict[str, threading.Lock] = {}
+_PTX_LOCKS_GUARD = threading.Lock()
+
+
+def _ptx_lock(ptx_dir: Path) -> threading.Lock:
+    key = str(ptx_dir.resolve())
+    with _PTX_LOCKS_GUARD:
+        return _PTX_LOCKS.setdefault(key, threading.Lock())
+
+
 def detect_gpu_devices() -> List[int]:
     import subprocess
     try:
@@ -557,26 +567,25 @@ def run_single_case(config: Config, test_dir: Path, runs: int = 3,
 
 def worker_ptx(config: Config, tc: Toolchain, ptx_dir: Path, src: Path) -> Dict[str, Any]:
     """Compile test.cu -> kernel.ptx for one toolchain (once, shared by all profiles)."""
-    import shutil
     ptx_dir.mkdir(parents=True, exist_ok=True)
     ptx_path = ptx_dir / "kernel.ptx"
-    try:
-        manifest = json.loads((src.parent / "manifest.json").read_text())
-    except Exception:  # noqa: BLE001
-        manifest = {}
-    if manifest.get("execution_mode", "driver_kernel") == "standalone_checksum":
-        rec = compiler.nvcc_standalone_ptx(
-            tc, src, ptx_path,
-            timeout=int(config.compilation.get("ptx_timeout", 60)))
-    else:
-        rec = compiler.nvcc_ptx(
-            tc, src, ptx_path,
-            timeout=int(config.compilation.get("ptx_timeout", 60)))
-    # copy into every build dir for archive consistency (per spec, kernel.ptx per build)
-    builds_root = ptx_dir.parent.parent / "builds"
-    if rec.ok and builds_root.exists():
-        for b in builds_root.glob("*__*"):
-            shutil.copy2(ptx_path, b / "kernel.ptx")
+    with _ptx_lock(ptx_dir):
+        if ptx_path.exists() and ptx_path.stat().st_size > 0:
+            rec = compiler.CmdRecord(
+                argv=[], returncode=0, stdout="", stderr="",
+                elapsed=0.0, ok=True)
+        else:
+            try:
+                manifest = json.loads((src.parent / "manifest.json").read_text())
+            except Exception:  # noqa: BLE001
+                manifest = {}
+            mode = manifest.get("execution_mode", "driver_kernel")
+            ptx_fn = (compiler.nvcc_standalone_ptx
+                      if compiler.uses_full_source_ptx(mode)
+                      else compiler.nvcc_ptx)
+            rec = ptx_fn(
+                tc, src, ptx_path,
+                timeout=int(config.compilation.get("ptx_timeout", 60)))
     return {"toolchain": tc.id, "ok": rec.ok, "returncode": rec.returncode,
             "stderr": rec.stderr[-500:]}
 
@@ -586,20 +595,21 @@ def worker_build(config: Config, tc: Toolchain, prof, ptx_dir: Path, test_dir: P
     """Compile one (toolchain x profile) build: cubin + sass + metrics."""
     build_dir = test_dir / "builds" / compiler.build_key(tc.id, prof.name)
     build_dir.mkdir(parents=True, exist_ok=True)
-    ptx_src = ptx_dir / "kernel.ptx"
     import shutil
-    if ptx_src.exists():
+    ptx_status = worker_ptx(config, tc, ptx_dir, test_dir / "test.cu")
+    ptx_src = ptx_dir / "kernel.ptx"
+    if ptx_status.get("ok") and ptx_src.exists():
         shutil.copy2(ptx_src, build_dir / "kernel.ptx")
     else:
-        try:
-            manifest = json.loads((test_dir / "manifest.json").read_text())
-        except Exception:  # noqa: BLE001
-            manifest = {}
-        ptx_fn = (compiler.nvcc_standalone_ptx
-                  if manifest.get("execution_mode") == "standalone_checksum"
-                  else compiler.nvcc_ptx)
-        ptx_fn(tc, test_dir / "test.cu", build_dir / "kernel.ptx",
-               timeout=int(config.compilation.get("ptx_timeout", 60)))
+        result = {
+            "toolchain": tc.id, "profile": prof.name, "ok": False,
+            "error": (f"shared PTX generation failed rc={ptx_status.get('returncode')}: "
+                      f"{ptx_status.get('stderr', '')[-300:]}"),
+            "commands": [],
+        }
+        (build_dir / "compile_result.json").write_text(json.dumps(result, indent=2))
+        return {"build": compiler.build_key(tc.id, prof.name), "ok": False,
+                "error": result["error"]}
     result = compiler.compile_build(config, tc, prof, test_dir, build_dir, extra_flags,
                                     timeout=int(config.compilation.get("compile_timeout", 120)))
     (build_dir / "compile_result.json").write_text(json.dumps(result, indent=2))

@@ -109,6 +109,7 @@ def _same_generated_artifacts(a: GeneratedCase, b: GeneratedCase) -> bool:
         and a.expected_sha256 == b.expected_sha256
         and a.execution_mode == b.execution_mode
         and a.oracle_mode == b.oracle_mode
+        and a.execution_spec == b.execution_spec
     )
 
 

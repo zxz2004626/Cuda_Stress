@@ -7,6 +7,10 @@ Pipeline per (toolchain, ptxas-profile):
 
 Every invocation records argv, stdout, stderr, return code and elapsed seconds in
 command.json, so "did the -O flag really reach ptxas" is auditable.
+
+generator_ir follows the same path: CUDA source -> one PTX per toolkit -> one
+cubin per ptxas profile.  Only legacy archived ``standalone_checksum`` cases
+retain the full-executable compatibility path.
 """
 
 from __future__ import annotations
@@ -22,6 +26,15 @@ from .config import Config, OptimizationProfile, Toolchain, isolated_env
 from . import disasm
 
 DEFAULT_TIMEOUT = 180
+
+
+def uses_full_source_ptx(execution_mode: str) -> bool:
+    """Modes whose CUDA source also contains a host harness.
+
+    They still compile device PTX once per toolchain; ``-std=c++17`` merely
+    keeps parsing consistent with the original full-program build.
+    """
+    return execution_mode in {"standalone_checksum", "driver_checksum"}
 
 
 @dataclass
@@ -131,7 +144,8 @@ def compile_build(config: Config, tc: Toolchain, profile: OptimizationProfile,
         manifest = json.loads((test_dir / "manifest.json").read_text())
     except Exception:  # noqa: BLE001
         manifest = {}
-    if manifest.get("execution_mode", "driver_kernel") == "standalone_checksum":
+    execution_mode = manifest.get("execution_mode", "driver_kernel")
+    if execution_mode == "standalone_checksum":
         return compile_standalone_build(
             config, tc, profile, test_dir, build_dir, extra_flags, timeout)
 
@@ -143,14 +157,21 @@ def compile_build(config: Config, tc: Toolchain, profile: OptimizationProfile,
     result: Dict[str, Any] = {"toolchain": tc.id, "profile": profile.name,
                               "ok": False, "error": None, "commands": []}
 
-    # 1. PTX (from this nvcc/cicc). Deterministic; compile fresh to guarantee the
-    #    archived PTX is exactly what ptxas consumed.
-    rec = nvcc_ptx(tc, src, ptx_path, timeout)
-    write_command_json(build_dir, rec)
-    result["commands"].append({"stage": "ptx", **rec.to_dict()})
-    if not rec.ok:
-        result["error"] = f"nvcc -ptx failed rc={rec.returncode}: {rec.stderr[-300:]}"
-        return result
+    # generator_ir's host-containing source is compiled to PTX exactly once by
+    # worker_ptx for each toolkit, then copied here for every ptxas profile.
+    if execution_mode == "driver_checksum" and ptx_path.exists():
+        result["commands"].append({
+            "stage": "ptx", "ok": True, "shared_artifact": True,
+            "path": ptx_path.name,
+        })
+    else:
+        # Legacy fixed-ABI cases retain their existing per-build frontend path.
+        rec = nvcc_ptx(tc, src, ptx_path, timeout)
+        write_command_json(build_dir, rec)
+        result["commands"].append({"stage": "ptx", **rec.to_dict()})
+        if not rec.ok:
+            result["error"] = f"nvcc -ptx failed rc={rec.returncode}: {rec.stderr[-300:]}"
+            return result
 
     # 2. CUBIN via ptxas with the requested -O level (proves the flag reaches ptxas).
     rec = ptxas_cubin(tc, profile, ptx_path, cubin_path, extra_flags, timeout)

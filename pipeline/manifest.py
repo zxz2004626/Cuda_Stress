@@ -82,4 +82,5 @@ def case_from_dir(test_dir: Path) -> GeneratedCase:
         valid=bool(m.get("valid", True)), reject_reason=m.get("reject_reason", ""),
         execution_mode=m.get("execution_mode", "driver_kernel"),
         oracle_mode=m.get("oracle_mode", "cpu_exact"),
+        execution_spec=m.get("execution_spec", {}),
     )

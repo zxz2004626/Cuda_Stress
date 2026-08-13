@@ -36,11 +36,19 @@ def parse_test_cu(text):
     section = text[start:end]
     instrs = re.findall(r'"((?:[^"\\]|\\.)*)"', section)
     cleaned = [re.sub(r'\\[nt]', '', i).strip() for i in instrs if re.sub(r'\\[nt]', '', i).strip()]
+    def is_setup(ins):
+        if re.match(r'mov\.(b32|u64)\s+%%x', ins):
+            return True
+        m = re.match(r'xor\.b32\s+(%%xr\d+),\s*(%%xr\d+),\s*(%%xr\d+)', ins)
+        if m and m.group(1) == m.group(2) == m.group(3):
+            return True  # self-xor = zero (register init)
+        return False
+
     decl, setup, body, teardown = [], [], [], []
     i = 0
     while i < len(cleaned) and cleaned[i].startswith('.reg'):
         decl.append(cleaned[i]); i += 1
-    while i < len(cleaned) and re.match(r'mov\.(b32|u64)\s+%%x', cleaned[i]):
+    while i < len(cleaned) and is_setup(cleaned[i]):
         setup.append(cleaned[i]); i += 1
     while i < len(cleaned) and (cleaned[-1].startswith('mov.u64 %0') or cleaned[-1].startswith('mov.u64 %1')):
         teardown.insert(0, cleaned.pop())
@@ -76,17 +84,59 @@ def compile_run(cu, opt, nvcc, seed, input_bin):
         except subprocess.TimeoutExpired:
             return None, "nvcc-timeout"
         if r.returncode != 0: return None, r.stderr[-120:]
-        try:
-            r = subprocess.run([RUNNER, "--cubin", str(c), "--kernel", "test_kernel",
-                "--input", str(input_bin), "--output", str(o), "--result", str(t/"r.json"),
-                "--input-words", "256", "--output-words", "128", "--grid", "1", "--block", "64",
-                "--seed", str(seed), "--guards", "8", "--test-id", "x", "--timeout-ms", "30000"], capture_output=True, text=True, timeout=120)
-        except subprocess.TimeoutExpired:
-            return None, "runner-timeout"
+        for attempt in range(3):
+            try:
+                r = subprocess.run([RUNNER, "--cubin", str(c), "--kernel", "test_kernel",
+                    "--input", str(input_bin), "--output", str(o), "--result", str(t/"r.json"),
+                    "--input-words", "256", "--output-words", "128", "--grid", "1", "--block", "64",
+                    "--seed", str(seed), "--guards", "8", "--test-id", "x", "--timeout-ms", "30000"], capture_output=True, text=True, timeout=120)
+                break
+            except subprocess.TimeoutExpired:
+                return None, "runner-timeout"
+            except FileNotFoundError:
+                if attempt == 2:
+                    return None, "runner-missing"
+                import time as _t; _t.sleep(2)
+        else:
+            return None, "runner-missing"
         if r.returncode != 0 or not o.exists(): return None, r.stderr[-120:]
         return hashlib.sha256(o.read_bytes()[BLOB.size:-8]).hexdigest()[:12], None
 
+def find_uninit(setup, body):
+    """Return registers read (as source) before being written (as dest), given `setup`.
+    A non-empty result means the body has undefined-behaviour (read-before-write)."""
+    initialized = set()
+    for ins in setup:
+        regs = re.findall(r'%x[rp][0-9]+', ins)
+        if regs:
+            initialized.add(regs[0])
+    uninit = []
+    for ins in body:
+        regs = re.findall(r'%x[rp][0-9]+', ins)
+        if not regs:
+            continue
+        for src in regs[1:]:
+            if src not in initialized and src not in uninit:
+                uninit.append(src)
+        initialized.add(regs[0])
+    return uninit
+
+def sanitize_setup(setup):
+    """Replace self-xor-zero (xor.b32 %xN,%xN,%xN — reads uninitialised register) with
+    an equivalent UB-free mov.b32 %xN, 0."""
+    out = []
+    for ins in setup:
+        m = re.match(r'xor\.b32\s+(%%xr\d+),\s*(%%xr\d+),\s*(%%xr\d+)', ins)
+        if m and m.group(1) == m.group(2) == m.group(3):
+            out.append(f'mov.b32 {m.group(1)}, 0;')
+        else:
+            out.append(ins)
+    return out
+
 def diverges(orig, decl, setup, body, teardown, nvcc, seed, input_bin):
+    uninit = find_uninit(setup, body)
+    if uninit:
+        return False, f"uninit:{','.join(uninit)}"
     cu = gen_test_cu(orig, decl, setup, body, teardown)
     o0, e0 = compile_run(cu, 0, nvcc, seed, input_bin)
     o1, e1 = compile_run(cu, 1, nvcc, seed, input_bin)
@@ -100,6 +150,7 @@ def main():
     seed = manifest["kernel_seed"]; input_bin = case/"input.bin"
     orig = (case/"test.cu").read_text()
     decl, setup, body, teardown = parse_test_cu(orig)
+    setup = sanitize_setup(setup)  # remove self-xor-zero UB in the setup
 
     # Phase 1: neutralise every non-root, non-scaffold, bit-manip op (replace with mov identity)
     # so its incidental divergence bug is removed WITHOUT breaking register liveness.
@@ -123,29 +174,51 @@ def main():
         print("  -> root cause is genuinely combinatorial (needs other ops); cannot isolate further.")
         sys.exit(2)
 
-    # Phase 2: bisect the scaffold (DELETE), pinning root cause
+    # Generic delta-debug: minimize `cands` while the predicate `pred(subset)` holds,
+    # keeping `fixed` instructions always present. Handles half==0 without looping.
+    def ddmin(cands, fixed, label, pred):
+        current = list(cands)
+        step = 0
+        while current:
+            step += 1
+            progressed = False
+            half = len(current) // 2
+            for cand in (current[half:], current[:half]):
+                if not cand or len(cand) == len(current):
+                    continue  # skip trivial/no-op candidates (avoids infinite loop)
+                d2, i2 = pred(fixed + cand)
+                if d2:
+                    current = cand
+                    print(f"  [{label} {step}] -> {len(current)}  {i2}")
+                    progressed = True
+                    break
+            if not progressed:
+                for i in range(len(current) - 1, -1, -1):
+                    cand = current[:i] + current[i+1:]
+                    d2, i2 = pred(fixed + cand)
+                    if d2:
+                        current = cand
+                        print(f"  [{label} {step}] -1 -> {len(current)}  {i2}")
+                        progressed = True
+                        break
+            if not progressed:
+                print(f"  [{label} {step}] minimal at {len(current)}")
+                break
+        return current
+
+    # Phase 2: minimize the scaffold (pin all root instructions)
     root_instrs = [i for i in kept if root in i]
     scaffold = [i for i in kept if root not in i]
-    print(f"  root instrs={len(root_instrs)}, scaffold={len(scaffold)}; bisecting...")
-    current = list(scaffold)
-    step = 0
-    while current:
-        step += 1
-        half = len(current)//2
-        progressed = False
-        for cand in (current[half:], current[:half]):
-            d2, i2 = diverges(orig, decl, setup, root_instrs + cand, teardown, nvcc, seed, input_bin)
-            if d2:
-                current = cand; print(f"  [{step}] -> {len(current)} scaffold  {i2}"); progressed = True; break
-        if not progressed:
-            for i in range(len(current)-1, -1, -1):
-                d2, i2 = diverges(orig, decl, setup, root_instrs + current[:i] + current[i+1:], teardown, nvcc, seed, input_bin)
-                if d2:
-                    current = current[:i] + current[i+1:]; print(f"  [{step}] -1 -> {len(current)}  {i2}"); progressed = True; break
-        if not progressed:
-            print(f"  [{step}] minimal scaffold at {len(current)}"); break
+    print(f"  root instrs={len(root_instrs)}, scaffold={len(scaffold)}; bisecting scaffold...")
+    pred_scaffold = lambda cand: diverges(orig, decl, setup, cand, teardown, nvcc, seed, input_bin)
+    min_scaffold = ddmin(scaffold, root_instrs, "scaffold", pred_scaffold)
 
-    mini = root_instrs + current
+    # Phase 3: minimize the root instructions (pin the minimal scaffold)
+    print(f"  minimizing root instructions (of {len(root_instrs)})...")
+    pred_root = lambda cand: diverges(orig, decl, setup, cand + min_scaffold, teardown, nvcc, seed, input_bin)
+    min_root = ddmin(root_instrs, min_scaffold, "root", pred_root)
+
+    mini = min_root + min_scaffold
     print(f"\n=== MINIMIZED (root cause '{root}' preserved): {len(body)} -> {len(mini)} ===")
     for ins in mini: print(f"  {ins}")
 

@@ -29,7 +29,7 @@ execution:
   gpu_workers_per_device: 1  # serial per GPU by default (isolation / determinism)
   runs_per_build: 3          # each build executed N times
   run_timeout: 60
-  runner_restart_after: 0    # 0 => fresh process per run (max isolation)
+  runner_restart_after: 100  # persistent generator_ir CUcontext; failure => immediate restart
   device_memory_guard_words: 8
 
 oracle:
