@@ -188,6 +188,13 @@ def _build_op_table() -> List[Dict[str, Any]]:
         O.append(_op(name, "r32", ["r32", "r32"], None,
                      lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
                      lambda v, n=name: _bin32(v, n)))
+    # Carry-flag variants: register result identical to add/sub, but they set
+    # CC, exercising the distinct IADD3.COUT / ISUB3.COUT SASS path.
+    for name in ("add.cc.u32", "sub.cc.u32"):
+        base = name.split(".")[0] + ".u32"
+        O.append(_op(name, "r32", ["r32", "r32"], None,
+                     lambda d, s, n=name: f"{n} {d}, {s[0]}, {s[1]};",
+                     lambda v, n=base: _bin32(v, n)))
     O.append(_op("mul.hi.u32", "r32", ["r32", "r32"], None,
                  lambda d, s: f"mul.hi.u32 {d}, {s[0]}, {s[1]};",
                  lambda v: ((v[0] * v[1]) >> 32) & M32))

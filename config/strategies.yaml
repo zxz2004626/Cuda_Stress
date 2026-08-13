@@ -74,9 +74,12 @@ strategies:
     enabled: false
     weight: 0.7
     variants:
-      # isa_stress / reg_spill_probe hang on the GPU (infinite/heavy kernels)
-      # and are only reached rarely via `random` (see PREFERENCE_TABLE weights).
-      - { template: map_transform, complexity: low, amplify_iters: 2, codegen: false }
-      - { template: random, complexity: low, amplify_iters: 2, codegen: false }
-      - { template: random, complexity: medium, amplify_iters: 2, codegen: false }
-      - { template: random, complexity: low, amplify_iters: 2, codegen: false }
+      # Stress ladder: medium/high complexity + wide-constant paths.  FP is left
+      # off the observed path (observable_fold keeps the checksum integer-exact
+      # so cross-compiler float variance never masquerades as a divergence).
+      # isa_stress / reg_spill_probe hang on this GPU; reachable only via
+      # `random` (PREFERENCE_TABLE weight 2.0).
+      - { template: map_transform, complexity: high, amplify_iters: 3, prob_wide_consts: 0.5, codegen: false }
+      - { template: random, complexity: medium, amplify_iters: 3, prob_wide_consts: 0.4, codegen: false }
+      - { template: random, complexity: high, amplify_iters: 3, prob_wide_consts: 0.5, codegen: false }
+      - { template: random, complexity: medium, amplify_iters: 3, prob_wide_consts: 0.4, codegen: false }

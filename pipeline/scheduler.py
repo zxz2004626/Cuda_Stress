@@ -223,6 +223,21 @@ class LoopScheduler:
     def _mutate_params(self, strategy_name: str, params: Dict[str, Any],
                        r: random.Random) -> Dict[str, Any]:
         p = dict(params)
+        if strategy_name == "generator_ir":
+            # generator_ir has no fixed ABI; diversify by bumping stress knobs.
+            # Bump the repeat count / scalar fan-in, and occasionally enable
+            # the FP-pool / wide-constant paths (well-defined; observable_fold
+            # keeps the checksum integer-exact so no cross-compiler FP noise).
+            for key in ("amplify_iters", "scalar_param_count", "codegen_repeat"):
+                if r.random() < 0.5:
+                    try:
+                        p[key] = max(1, int(p[key] * r.choice([1.5, 2.0, 3.0])))
+                    except (KeyError, TypeError):
+                        pass
+            for key in ("prob_float_pool", "prob_wide_consts"):
+                if r.random() < 0.4:
+                    p[key] = r.choice([0.25, 0.5, 0.75])
+            return p
         numeric_keys = {
             "predicate_pressure": ["num_comparisons", "chain_len", "num_diamonds", "dup_groups"],
             "integer_chain": ["chain_len"],
@@ -386,6 +401,7 @@ class LoopScheduler:
 
         # input-sensitivity check for retained cases
         if result.category in (Category.INTERESTING, Category.POTENTIAL_BUG) and \
+           result.status != Status.HANG_DIVERGENCE and \
            self.cfg.oracle.get("verify_input_sensitivity", True):
             try:
                 if case.oracle_mode == "cross_build":

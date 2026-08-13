@@ -205,6 +205,20 @@ def compare_matrix(config: Config, case: GeneratedCase, test_dir: Path,
         oracle_note = f"oracle_hash={oracle_hash[:16]}" if oracle_hash else "cross-build oracle"
         result.note = (f"{len(stable_by_hash)} distinct stable outputs across builds; "
                        f"{oracle_note}")
+    elif has_timeout and len(stable_by_hash) >= 1:
+        # Some stable builds completed while others hung: a differential hang
+        # (finite loop -> infinite in one ptxas -O path / toolchain) is itself
+        # a wrong-code candidate, distinct from a checksum divergence.
+        hung = [k for k, br in build_results.items() if br.status == Status.RUN_TIMEOUT]
+        ok = [k for k, br in build_results.items()
+              if br.status in (Status.PASS, Status.ORACLE_MISMATCH)]
+        result.status = Status.HANG_DIVERGENCE
+        result.diff_detail = {
+            "hung_builds": hung, "ok_builds": ok,
+            "note": "some builds hang while others complete (differential hang)",
+        }
+        result.note = (f"{len(hung)} build(s) timed out while {len(ok)} build(s) "
+                       f"completed — differential hang")
     elif len(stable_by_hash) == 1 and case.oracle_mode != "cross_build" \
             and next(iter(stable_by_hash)) != oracle_hash:
         # Oracle disagreement outranks an unrelated missing/failed matrix arm.
@@ -237,7 +251,8 @@ def compare_matrix(config: Config, case: GeneratedCase, test_dir: Path,
 
 
 def classify(status: str) -> str:
-    if status == Status.POTENTIAL_COMPILER_BUG or status == Status.ORACLE_MISMATCH:
+    if status in (Status.POTENTIAL_COMPILER_BUG, Status.ORACLE_MISMATCH,
+                  Status.HANG_DIVERGENCE):
         return Category.POTENTIAL_BUG
     if status == Status.NONDETERMINISTIC:
         return Category.FLAKY
