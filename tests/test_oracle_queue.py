@@ -9,7 +9,7 @@ from pipeline.oracle import recompute_expected, oracle_audit, verify_input_sensi
 from pipeline.manifest import write_testcase_dir
 from pipeline.queue import TaskQueue
 from generator.base import default_registry
-from generator.strategies import ALL
+from generator.strategies import CPU_ORACLE_ALL
 
 PARAMS = {
     "predicate_pressure": {"num_comparisons": 32, "chain_len": 48, "num_diamonds": 12,
@@ -28,7 +28,7 @@ PARAMS = {
 }
 
 
-@pytest.mark.parametrize("cls", ALL, ids=lambda c: c.name)
+@pytest.mark.parametrize("cls", CPU_ORACLE_ALL, ids=lambda c: c.name)
 def test_oracle_recompute_matches(tmp_path, cls):
     reg = default_registry()
     case = reg.get(cls.name).generate(20260810, 21, PARAMS[cls.name], "1.0.0", "sm_86")
@@ -38,7 +38,7 @@ def test_oracle_recompute_matches(tmp_path, cls):
     assert audit["oracle_recompute"]["match"] is True
 
 
-@pytest.mark.parametrize("cls", ALL, ids=lambda c: c.name)
+@pytest.mark.parametrize("cls", CPU_ORACLE_ALL, ids=lambda c: c.name)
 def test_input_sensitivity(tmp_path, cls):
     """A tweaked input must change the output for every strategy (real runtime dependence)."""
     reg = default_registry()

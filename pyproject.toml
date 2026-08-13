@@ -13,9 +13,8 @@ dependencies = ["PyYAML>=5.4"]
 dev = ["pytest>=6.2"]
 
 [tool.setuptools]
-packages = [
-    "cuda_stress",
-    "cuda_stress.pipeline",
-    "cuda_stress.generator",
-    "cuda_stress.generator.strategies",
-]
+py-modules = ["cuda_stress"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["generator*", "generator_ir*", "pipeline*"]

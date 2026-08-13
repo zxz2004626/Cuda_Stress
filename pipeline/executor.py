@@ -8,14 +8,16 @@ one kernel at a time (determinism / no resource contention).
 from __future__ import annotations
 
 import json
+import re
 import struct
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .config import Config, Toolchain
+from .config import Config, Toolchain, isolated_env
 from generator.base import GeneratedCase
 
 BLOB_HEADER = struct.Struct("<QQIIQQ")  # magic, test_id_hash, status, reserved, words, canary
@@ -68,15 +70,24 @@ def runner_path(config: Config) -> Path:
 
 
 def run_build(config: Config, tc: Toolchain, case: GeneratedCase, build_dir: Path,
-              run_index: int, device: int = 0, timeout: Optional[float] = None) -> RunResult:
+              run_index: Any, device: int = 0, timeout: Optional[float] = None,
+              input_salt: int = 0) -> RunResult:
     """Run one build once on `device`, write output_run_<N>.bin + execution_run_<N>.json."""
+    if case.execution_mode == "standalone_checksum":
+        return _run_standalone_checksum(
+            config, tc, case, build_dir, run_index, device, timeout, input_salt)
+
     runner = runner_path(config)
     build_dir.mkdir(parents=True, exist_ok=True)
     cubin = build_dir / "kernel.cubin"
-    if not cubin.exists():
-        return RunResult(status="BAD_SPEC", output_words=None, error="cubin missing")
     out_path = build_dir / f"output_run_{run_index}.bin"
     exec_path = build_dir / f"execution_run_{run_index}.json"
+    # Never let a failed re-run inherit an apparently valid result from an
+    # earlier invocation with the same run tag.
+    out_path.unlink(missing_ok=True)
+    exec_path.unlink(missing_ok=True)
+    if not cubin.exists():
+        return RunResult(status="BAD_SPEC", output_words=None, error="cubin missing")
 
     grid = ",".join(str(x) for x in case.grid)
     block = ",".join(str(x) for x in case.block)
@@ -104,8 +115,12 @@ def run_build(config: Config, tc: Toolchain, case: GeneratedCase, build_dir: Pat
         r = subprocess.run(argv, capture_output=True, text=True,
                            timeout=timeout or config.execution.get("run_timeout", 60))
     except subprocess.TimeoutExpired:
+        limit = timeout or config.execution.get("run_timeout", 60)
+        info = {"status": "TIMEOUT", "returncode": EXIT_TIMEOUT,
+                "error": f"runner timed out after {limit}s"}
+        exec_path.write_text(json.dumps(info, indent=2))
         return RunResult(status="TIMEOUT", output_words=None,
-                         error=f"runner timed out after {timeout or config.execution.get('run_timeout', 60)}s")
+                         error=info["error"], execution=info)
 
     exec_info: Dict[str, Any] = {}
     if exec_path.exists():
@@ -129,6 +144,117 @@ def run_build(config: Config, tc: Toolchain, case: GeneratedCase, build_dir: Pat
     else:
         result.error = exec_info.get("error", "")
     return result
+
+
+_CHECKSUM_RE = re.compile(r"^checksum=([0-9]+)$")
+
+
+def _test_id_hash(test_id: str) -> int:
+    """64-bit FNV-1a, matching the native runner's diagnostic id field."""
+    h = 1469598103934665603
+    for b in test_id.encode("utf-8"):
+        h ^= b
+        h = (h * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def _write_ok_blob(path: Path, test_id: str, payload: bytes) -> None:
+    if len(payload) % 8:
+        raise ValueError("result payload must contain whole u64 words")
+    words = len(payload) // 8
+    blob = BLOB_HEADER.pack(
+        BLOB_MAGIC, _test_id_hash(test_id), 0, 0, words, BLOB_CANARY)
+    path.write_bytes(blob + payload + struct.pack("<Q", BLOB_TAIL_CANARY))
+
+
+def _run_standalone_checksum(config: Config, tc: Toolchain,
+                             case: GeneratedCase, build_dir: Path,
+                             run_index: Any, device: int,
+                             timeout: Optional[float], input_salt: int) -> RunResult:
+    """Execute a generator-owned harness and normalize its checksum to a blob."""
+    build_dir.mkdir(parents=True, exist_ok=True)
+    exe = build_dir / "kernel.exe"
+    out_path = build_dir / f"output_run_{run_index}.bin"
+    exec_path = build_dir / f"execution_run_{run_index}.json"
+    out_path.unlink(missing_ok=True)
+    exec_path.unlink(missing_ok=True)
+    if not exe.exists():
+        info = {"status": "BAD_SPEC", "returncode": -1,
+                "error": "standalone executable missing",
+                "input_salt": int(input_salt) & 0xFFFFFFFF}
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="BAD_SPEC", output_words=None,
+                         error=info["error"], execution=info)
+
+    limit = float(timeout or config.execution.get("run_timeout", 60))
+    env = isolated_env(tc)
+    # The harness uses the runtime API and selects its default logical device.
+    # CUDA_VISIBLE_DEVICES maps the requested physical device to logical 0.
+    env["CUDA_VISIBLE_DEVICES"] = str(device)
+    env["CUDA_STRESS_INPUT_SALT"] = str(int(input_salt) & 0xFFFFFFFF)
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.run([str(exe)], capture_output=True, text=True,
+                              timeout=limit, env=env, cwd=build_dir)
+    except subprocess.TimeoutExpired as exc:
+        info = {
+            "status": "TIMEOUT", "returncode": 124,
+            "elapsed_us": int(limit * 1_000_000),
+            "input_salt": int(input_salt) & 0xFFFFFFFF,
+            "stdout": (exc.stdout or "")[-8000:] if isinstance(exc.stdout, str) else "",
+            "stderr": (exc.stderr or "")[-8000:] if isinstance(exc.stderr, str) else "",
+        }
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="TIMEOUT", output_words=None,
+                         error=f"standalone harness timed out after {limit}s",
+                         elapsed_us=info["elapsed_us"], execution=info)
+    except OSError as exc:
+        info = {"status": "BAD_SPEC", "returncode": -1, "error": str(exc),
+                "input_salt": int(input_salt) & 0xFFFFFFFF}
+        exec_path.write_text(json.dumps(info, indent=2))
+        return RunResult(status="BAD_SPEC", output_words=None,
+                         error=str(exc), execution=info)
+
+    elapsed_us = int((time.monotonic() - t0) * 1_000_000)
+    matches = []
+    for line in proc.stdout.splitlines():
+        match = _CHECKSUM_RE.fullmatch(line.strip())
+        if match:
+            matches.append(int(match.group(1)))
+
+    status = "OK"
+    error = ""
+    checksum: Optional[int] = None
+    if proc.returncode != 0:
+        status = "CUDA_ERROR"
+        error = proc.stderr[-500:] or f"standalone harness exited {proc.returncode}"
+    elif len(matches) != 1:
+        status = "BAD_SPEC"
+        error = f"expected exactly one checksum=<u64> line, found {len(matches)}"
+    elif not 0 <= matches[0] <= 0xFFFFFFFFFFFFFFFF:
+        status = "BAD_SPEC"
+        error = f"checksum outside u64 range: {matches[0]}"
+    else:
+        checksum = matches[0]
+
+    info = {
+        "status": status,
+        "returncode": proc.returncode,
+        "elapsed_us": elapsed_us,
+        "checksum": checksum,
+        "input_salt": int(input_salt) & 0xFFFFFFFF,
+        "stdout": proc.stdout[-8000:],
+        "stderr": proc.stderr[-8000:],
+    }
+    exec_path.write_text(json.dumps(info, indent=2))
+    if status != "OK" or checksum is None:
+        return RunResult(status=status, output_words=None, error=error,
+                         elapsed_us=elapsed_us, execution=info)
+
+    payload = struct.pack("<Q", checksum)
+    _write_ok_blob(out_path, case.case_id(), payload)
+    return RunResult(status="OK", output_words=payload, meaningful_words=1,
+                     elapsed_us=elapsed_us, execution=info)
 
 
 class DeviceGate:

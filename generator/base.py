@@ -54,6 +54,15 @@ class GeneratedCase:
     sanitizer_policy: str = "none"
     valid: bool = True
     reject_reason: str = ""
+    # How the compiled testcase is executed.  Legacy strategies expose the
+    # fixed Driver-API ABI consumed by native/cuda_runner.  Generators that
+    # need their own host-side setup can instead emit a standalone executable
+    # which reports one deterministic checksum.
+    execution_mode: str = "driver_kernel"
+    # cpu_exact compares every stable result with expected.bin.  cross_build
+    # has no independent CPU interpreter and treats agreement across the
+    # compile matrix as the baseline while still detecting stable divergence.
+    oracle_mode: str = "cpu_exact"
 
     # -- stable identity ----------------------------------------------------
     @property
@@ -100,6 +109,8 @@ class GeneratedCase:
             "target_sm": self.target_sm,
             "comparison_policy": self.comparison_policy,
             "cpu_oracle": self.cpu_oracle,
+            "execution_mode": self.execution_mode,
+            "oracle_mode": self.oracle_mode,
             "sanitizer_policy": self.sanitizer_policy,
             "cuda_features": self.cuda_features,
             "hashes": {

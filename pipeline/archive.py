@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -77,6 +78,15 @@ def write_testcase_artifacts(test_dir: Path, case) -> None:
     (test_dir / "input.bin").write_bytes(case.input_bytes)
     (test_dir / "expected.bin").write_bytes(case.expected_bytes)
     (test_dir / "manifest.json").write_text(json.dumps(case.manifest(), indent=2, sort_keys=True))
+    (test_dir / "generation.json").write_text(json.dumps({
+        "generator_version": case.generator_version,
+        "config_seed": case.config_seed,
+        "test_seed": case.test_seed,
+        "strategy": case.strategy,
+        "strategy_params": case.params,
+        "execution_mode": case.execution_mode,
+        "oracle_mode": case.oracle_mode,
+    }, indent=2, sort_keys=True))
 
 
 def append_ledger(run_dir: Path, record: Dict[str, Any]) -> None:
@@ -130,6 +140,9 @@ def write_differential(config: Config, run_dir: Path, case, result: CaseResult) 
     shutil.copy2(src_dir / "test.cu", diff_dir / "test.cu")
     shutil.copy2(src_dir / "input.bin", diff_dir / "input.bin")
     shutil.copy2(src_dir / "expected.bin", diff_dir / "expected.bin")
+    for optional in ("generation.json", "input_sensitivity.json"):
+        if (src_dir / optional).exists():
+            shutil.copy2(src_dir / optional, diff_dir / optional)
 
     builds = src_dir / "builds"
     if builds.exists():
@@ -147,6 +160,8 @@ def write_differential(config: Config, run_dir: Path, case, result: CaseResult) 
         "config_seed": case.config_seed,
         "test_seed": case.test_seed,
         "params": case.params,
+        "execution_mode": case.execution_mode,
+        "oracle_mode": case.oracle_mode,
         "toolchains": [t.as_dict() for t in config.toolchains],
     }
     (diff_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
@@ -162,21 +177,20 @@ def make_reproduce_sh(config: Config, case) -> str:
         "# Regenerate and re-run one differential case.",
         "# Usage: ./reproduce.sh [test_id]",
         "set -euo pipefail",
-        f"ROOT={root}",
-        f"CASE_ID={case.case_id()}",
-        f"STRATEGY={case.strategy}",
+        f"ROOT={shlex.quote(str(root))}",
+        f"CASE_ID={shlex.quote(case.case_id())}",
+        f"STRATEGY={shlex.quote(case.strategy)}",
         f"TEST_SEED={case.test_seed}",
         f"CONFIG_SEED={case.config_seed}",
-        f"PARAMS={json.dumps(case.params)}",
+        f"PARAMS={shlex.quote(json.dumps(case.params, sort_keys=True))}",
         "",
         "cd \"$ROOT\"",
         f"python3 -m cuda_stress generate --strategy \"$STRATEGY\" --test-seed \"$TEST_SEED\" \\",
         "    --config-seed \"$CONFIG_SEED\" --params \"$PARAMS\" --out /tmp/cuda_stress_repro",
         f"python3 -m cuda_stress run --test /tmp/cuda_stress_repro/{case.case_id()} --runs 3",
         f"python3 -m cuda_stress compare --test /tmp/cuda_stress_repro/{case.case_id()}",
-        f"python3 -m cuda_stress report --test /tmp/cuda_stress_repro/{case.case_id()}",
         "",
-        "echo \"reproduce complete; inspect the report above.\"",
+        "echo \"reproduce complete; inspect the comparison above.\"",
     ]
     return "\n".join(lines) + "\n"
 
@@ -231,7 +245,7 @@ def run_gc(config: Config, run_dir: Path, state: Dict[str, Any]) -> Dict[str, An
                 continue
             if storage.get("delete_redundant_cubin", True):
                 for b in (d / "builds").glob("*__*"):
-                    for art in ("kernel.cubin", "kernel.sass", "kernel.ptx"):
+                    for art in ("kernel.cubin", "kernel.exe", "kernel.sass", "kernel.ptx"):
                         f = b / art
                         if f.exists():
                             f.unlink()

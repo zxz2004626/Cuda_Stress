@@ -22,6 +22,8 @@ PARAMS = {
                           "call_style": "noinline", "variant": "none"},
     "inline_ptx": {"n_instr": 40, "n_regs32": 6, "n_regs64": 4, "n_preds": 3,
                   "use_rare_ops": True, "use_immediates": True},
+    "generator_ir": {"template": "map_transform", "complexity": "low",
+                     "amplify_iters": 1, "codegen": False},
 }
 
 
@@ -37,7 +39,12 @@ def test_strategy_generates_deterministically(cls):
     assert c1.expected_bytes == c2.expected_bytes
     assert c1.valid
     # output length must match grid*block*owpt
-    assert len(c1.expected_bytes) == c1.total_threads() * c1.output_words_per_thread * 8
+    if c1.oracle_mode == "cpu_exact":
+        assert len(c1.expected_bytes) == c1.total_threads() * c1.output_words_per_thread * 8
+    else:
+        assert c1.expected_bytes == b""
+        assert c1.execution_mode == "standalone_checksum"
+        assert c1.source.count("<<<grid, block") == 1
 
 
 @pytest.mark.parametrize("cls", ALL, ids=lambda c: c.name)
@@ -63,6 +70,8 @@ def test_manifest_roundtrip(cls):
     assert back.input_bytes == case.input_bytes
     assert back.expected_bytes == case.expected_bytes
     assert back.kernel_seed == case.kernel_seed
+    assert back.execution_mode == case.execution_mode
+    assert back.oracle_mode == case.oracle_mode
 
 
 def test_register_pressure_maxrregcount_flag():

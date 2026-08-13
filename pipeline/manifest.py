@@ -32,6 +32,8 @@ def write_testcase_dir(test_dir: Path, case: GeneratedCase, generator_version: s
         "test_seed": case.test_seed,
         "strategy": case.strategy,
         "strategy_params": case.params,
+        "execution_mode": case.execution_mode,
+        "oracle_mode": case.oracle_mode,
     }
     (test_dir / "generation.json").write_text(json.dumps(gen, indent=2, sort_keys=True))
     return manifest
@@ -76,4 +78,8 @@ def case_from_dir(test_dir: Path) -> GeneratedCase:
         target_sm=m["target_sm"], cpu_oracle=m["cpu_oracle"],
         comparison_policy=m["comparison_policy"], cuda_features=m.get("cuda_features", []),
         kernel_entry=m.get("kernel_entry", "test_kernel"),
+        sanitizer_policy=m.get("sanitizer_policy", "none"),
+        valid=bool(m.get("valid", True)), reject_reason=m.get("reject_reason", ""),
+        execution_mode=m.get("execution_mode", "driver_kernel"),
+        oracle_mode=m.get("oracle_mode", "cpu_exact"),
     )

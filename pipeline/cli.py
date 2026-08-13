@@ -16,8 +16,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -26,7 +24,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from .config import Config, load_config
-from . import archive, comparator, compiler, executor, oracle as oracle_mod, probe, scheduler
+from . import archive, comparator, probe, scheduler
 from .queue import TaskQueue
 from generator.base import default_registry, GeneratedCase
 
@@ -58,8 +56,60 @@ def _materialize_generated(config: Config, case: GeneratedCase, out_dir: Path) -
     (d / "generation.json").write_text(json.dumps({
         "generator_version": case.generator_version, "config_seed": case.config_seed,
         "test_seed": case.test_seed, "strategy": case.strategy, "strategy_params": case.params,
+        "execution_mode": case.execution_mode, "oracle_mode": case.oracle_mode,
     }, indent=2))
     return d
+
+
+def _selected_strategies(config: Config, reg, explicit: List[str],
+                         generator_mode: Optional[str]) -> List[str]:
+    """Resolve the optional generator backend without changing legacy defaults."""
+    if explicit:
+        return list(dict.fromkeys(explicit))
+    mode = generator_mode or str(config.generation.get("generator", "builtin"))
+    enabled = [
+        name for name in reg.names()
+        if bool(config.strategies.get(name, {}).get("enabled", True))
+    ]
+    if mode == "generator_ir":
+        return ["generator_ir"]
+    if mode == "builtin":
+        return [name for name in enabled if name != "generator_ir"]
+    if mode == "mixed":
+        # An explicit mixed selection opts into the IR backend even when its
+        # default config entry is disabled for backwards compatibility.
+        return list(dict.fromkeys(enabled + ["generator_ir"]))
+    raise ValueError(f"unknown generator mode {mode!r}")
+
+
+def _target_sm(config: Config) -> str:
+    configured = config.generation.get("target_sm")
+    if configured:
+        return str(configured)
+    if config.toolchains:
+        return str(config.toolchains[0].arch)
+    return "sm_86"
+
+
+def _regenerate(case: GeneratedCase) -> GeneratedCase:
+    return default_registry().get(case.strategy).generate(
+        config_seed=case.config_seed,
+        test_seed=case.test_seed,
+        params=case.params,
+        gen_version=case.generator_version,
+        target_sm=case.target_sm,
+    )
+
+
+def _same_generated_artifacts(a: GeneratedCase, b: GeneratedCase) -> bool:
+    return (
+        a.case_id() == b.case_id()
+        and a.source_sha256 == b.source_sha256
+        and a.input_sha256 == b.input_sha256
+        and a.expected_sha256 == b.expected_sha256
+        and a.execution_mode == b.execution_mode
+        and a.oracle_mode == b.oracle_mode
+    )
 
 
 def cmd_generate(args) -> int:
@@ -74,13 +124,22 @@ def cmd_generate(args) -> int:
         if src is None:
             print(f"case {args.reproduce} not found", file=sys.stderr)
             return 1
-        case = _case_from_dir(src)
+        stored = _case_from_dir(src)
+        case = _regenerate(stored)
         d = _materialize_generated(config, case, out_dir)
-        ok = check_case_dir(d)
-        print(f"reproduced {case.case_id()} -> {d}  hashes={'OK' if ok else 'MISMATCH'}")
+        ok = check_case_dir(d) and _same_generated_artifacts(stored, case)
+        print(f"reproduced {stored.case_id()} -> {d}  hashes={'OK' if ok else 'MISMATCH'}")
         return 0 if ok else 1
 
-    strategies = args.strategy or reg.names()
+    try:
+        strategies = _selected_strategies(
+            config, reg, args.strategy, getattr(args, "generator", None))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if not strategies:
+        print("no enabled generation strategies selected", file=sys.stderr)
+        return 2
     count = int(args.count)
     config_seed = int(args.config_seed)
     start_seed = int(args.test_seed)
@@ -92,7 +151,10 @@ def cmd_generate(args) -> int:
         for i in range(count):
             test_seed = start_seed + i
             p = params if params is not None else _default_params(config, sname)
-            case = strat.generate(config_seed, test_seed, p, "1.0.0", "sm_86")
+            case = strat.generate(
+                config_seed, test_seed, p,
+                str(config.generation.get("generator_version", "1.0.0")),
+                _target_sm(config))
             d = _materialize_generated(config, case, out_dir)
             try:
                 rel = d.relative_to(PROJECT_ROOT)
@@ -133,11 +195,11 @@ def cmd_reproduce(args) -> int:
     if src is None:
         print(f"case {args.id} not found in corpus/runs/queue", file=sys.stderr)
         return 1
-    case = _case_from_dir(src)
+    stored = _case_from_dir(src)
+    case = _regenerate(stored)
     out_dir = Path(args.out).resolve()
     d = _materialize_generated(config, case, out_dir)
-    shutil.copy2(src / "expected.bin", d / "expected.bin")
-    ok = check_case_dir(d)
+    ok = check_case_dir(d) and _same_generated_artifacts(stored, case)
     (d / "reproduce.sh").write_text(archive.make_reproduce_sh(config, case))
     print(f"case_id     : {case.case_id()}")
     print(f"strategy    : {case.strategy}")
@@ -166,11 +228,15 @@ def cmd_run(args) -> int:
     if not (test_dir / "test.cu").exists():
         print(f"no test.cu in {test_dir}", file=sys.stderr)
         return 1
-    res = scheduler.run_single_case(config, test_dir,
-                                    runs=int(args.runs),
-                                    toolchain_ids=args.toolchain,
-                                    profile_names=args.profile,
-                                    device=int(args.device))
+    try:
+        res = scheduler.run_single_case(config, test_dir,
+                                        runs=int(args.runs),
+                                        toolchain_ids=args.toolchain,
+                                        profile_names=args.profile,
+                                        device=int(args.device))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(json.dumps(res, indent=2, default=str))
     return 0
 
@@ -264,12 +330,19 @@ def cmd_loop(args) -> int:
     queue = TaskQueue(config.project_root / "queue")
     if args.resume:
         queue.recover()
+        # A plain `resume` continues the backend selected by the interrupted
+        # loop.  An explicit flag still overrides the saved mode.
+        saved_mode = queue.read_state().get("generation_mode")
+        if not getattr(args, "generator", None) and saved_mode:
+            config.generation["generator"] = saved_mode
         run_id = queue.read_run_id()
         if not run_id:
             run_id = archive.new_run_id(config)
         run_dir = config.project_root / "runs" / run_id
     else:
         run_dir = config.project_root / "runs" / archive.new_run_id(config)
+    if getattr(args, "generator", None):
+        config.generation["generator"] = args.generator
     stop = scheduler._Stopper()
     sched = scheduler.LoopScheduler(config, run_dir, queue, stop=stop,
                                     max_cases=int(args.max_cases or 0),
@@ -324,6 +397,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("generate", help="generate testcases")
     g.add_argument("--strategy", action="append", default=[])
+    g.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"],
+                   default=None, help="select a generation backend (strategies remain available)")
     g.add_argument("--count", default=1)
     g.add_argument("--config-seed", default=20260810)
     g.add_argument("--test-seed", default=0)
@@ -362,14 +437,17 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--duration", default=None)
     lp.add_argument("--seed", default=None)
     lp.add_argument("--resume", action="store_true")
+    lp.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"], default=None)
     lp.set_defaults(func=cmd_loop)
 
     rs = sub.add_parser("resume", help="resume the interrupted loop")
     rs.add_argument("--max-cases", default=0)
     rs.add_argument("--duration", default=None)
+    rs.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"], default=None)
     rs.set_defaults(func=lambda a: cmd_loop(argparse.Namespace(
         config=a.config, toolchains=a.toolchains, strategies=a.strategies,
-        max_cases=a.max_cases, duration=a.duration, seed=None, resume=True)))
+        max_cases=a.max_cases, duration=a.duration, seed=None, resume=True,
+        generator=a.generator)))
 
     gc = sub.add_parser("gc", help="run garbage collection on the disk budget")
     gc.add_argument("--run", default=None)

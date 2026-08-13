@@ -18,6 +18,11 @@ Generator → stress-gate → N×M compile → PTX/SASS metrics → GPU run ×3
          → mutate & generate next batch   (continuous, resumable loop)
 ```
 
+Two generation backends feed that same queue/comparison/archive pipeline:
+the original fixed-ABI strategies (default), and the optional `generator_ir`
+backend, which emits complete CUDA Runtime programs and compares a deterministic
+u64 checksum across builds.
+
 ---
 
 ## Requirements
@@ -41,6 +46,9 @@ python3 pipeline.py doctor --force
 python3 -m cuda_stress generate --strategy integer_chain \
         --strategy predicate_pressure --count 4 --test-seed 100
 
+# Optional: generate one IR-based standalone/checksum testcase
+python3 -m cuda_stress generate --generator generator_ir --count 1 --test-seed 100
+
 # 4. Compile + run one case's full matrix (all toolchains × all ptxas profiles × 3 runs)
 python3 -m cuda_stress run --test corpus/accepted/integer_chain__<id> --runs 3
 python3 -m cuda_stress compare --test corpus/accepted/integer_chain__<id>
@@ -48,6 +56,8 @@ python3 -m cuda_stress compare --test corpus/accepted/integer_chain__<id>
 # 5. Continuous, resumable differential-testing loop
 python3 pipeline.py loop --max-cases 100          # finite run for regression
 python3 pipeline.py loop --duration 24h           # long unattended run
+python3 pipeline.py loop --generator generator_ir --max-cases 100
+python3 pipeline.py loop --generator mixed --max-cases 100
 python3 pipeline.py status                        # queue / run state
 python3 pipeline.py resume                        # continue an interrupted loop
 python3 pipeline.py report --run <run_id>         # summarize a run
@@ -91,9 +101,9 @@ this per testcase and reports it rather than pretending the levels are distinct.
 (error 222).  CUDA 13 toolchains still participate in the compile + SASS-metrics matrix;
 their run results are recorded as `UNSUPPORTED`, never as a compiler bug.
 
-## Testcase ABI and layout
+## Testcase execution contracts and layout
 
-Every testcase compiles to the same entry point:
+Original strategies compile to the fixed entry point:
 
 ```cuda
 extern "C" __global__ void test_kernel(
@@ -107,7 +117,16 @@ A case directory contains `test.cu`, `manifest.json`, `input.bin`, `expected.bin
 `generation.json`.  A case is a **pure function of `(config_seed, test_seed, strategy,
 params)`** — regenerate it byte-for-byte with `reproduce`.
 
-## Generators (5 strategies × parameterized variants)
+`generator_ir` cases declare `execution_mode: standalone_checksum` and
+`oracle_mode: cross_build` in the manifest.  Their generated `test.cu` includes the
+generator's own host initialization plus a checksum-only harness: a fresh process
+initializes all state, launches exactly once, and prints one `checksum=<u64>` line.
+`input.bin` and `expected.bin` remain empty compatibility artifacts; they are never
+misrepresented as a CPU oracle.  Each build is still run repeatedly for stability,
+and stable checksum disagreement across the toolchain/profile matrix is classified as
+`POTENTIAL_COMPILER_BUG`.
+
+## Generators (original strategies + optional IR backend)
 
 | strategy            | what it stresses |
 |---------------------|------------------|
@@ -117,12 +136,19 @@ params)`** — regenerate it byte-for-byte with `reproduce`.
 | `warp_mixed`        | `__ballot`/`__any`/`__all`/`__activemask`/`__shfl*`/`__match_any`/`__match_all`, full and legal partial member masks (width-16 segments), then a long chain + store |
 | `register_pressure` | 32–128 simultaneously-live u64 values across `__noinline__`/`__forceinline__` chains, merge + reuse, `launch_bounds`/`maxrregcount` variants |
 | `inline_ptx`        | an ISA-constrained inline-PTX block (`asm volatile`) with 140+ CPU-mirrored type/modifier variants across scalar integer, bit manipulation, logic, shifts, comparisons and selection. `balanced` mode guarantees each eligible variant before repetition; `random` mode explores stochastic cross-family chains. PTX-version/SM gates, boundary immediates, 32/64-bit mixing and accumulator folds keep cases valid and optimization-relevant |
+| `generator_ir`      | optional typed-IR/template generator (`map_transform`, reductions, scans, 2D tiles, synchronization, register/ISA stress, and more); emits a complete CUDA program and uses deterministic cross-build checksum consensus rather than replacing any original strategy |
 
-Every strategy has an **independent CPU oracle** (`cpu_oracle`) that mirrors the CUDA
+Every original strategy has an **independent CPU oracle** (`cpu_oracle`) that mirrors the CUDA
 semantics exactly (mod-2^64 arithmetic, PTX bit ops, warp lane/member-mask rules, byte
 endianness) — verified on-GPU by the smoke tests.  All shift amounts, divisors, indices,
 warp member masks and byte offsets are constrained at generation time; unsafe candidates
 are rejected with a reason.
+
+The IR backend does not have a complete CPU interpreter (its IR includes host-initialized
+global/constant state, atomics, synchronization and optional 2D kernels).  Its explicit
+`cross_build` oracle therefore detects compiler/configuration divergence without inventing
+an `expected.bin`.  `observable_fold` is forced on, performance warmups are disabled, and
+an input-salt rerun checks that retained checksums really depend on runtime input.
 
 ### inline_ptx implementation notes
 
@@ -180,6 +206,7 @@ pipeline/disasm.py         SASS/PTX instruction counts, opcode histograms, norma
 pipeline/stress_metrics.py configurable stress gate + weighted novelty score
 pipeline/comparator.py     per-build stability, CPU-oracle equality, cross-matrix differential
 pipeline/executor.py       runner invocation, per-device serialization, output-blob parsing
+                           + isolated standalone checksum execution for generator_ir
 pipeline/manifest.py       standard case-dir read/write, hash verification
 pipeline/oracle.py         CPU-oracle recompute, input-sensitivity check
 pipeline/queue.py          directory queue with atomic-rename state transitions
@@ -217,7 +244,8 @@ generate → (stress gate) → N×M compile → PTX/SASS metrics → GPU run ×3
   (one worker per device by default — no resource contention, deterministic),
 * directory queue + atomic `rename` per state transition, so a crash leaves every task in
   a recoverable stage (`resume` rehydrates),
-* every random decision is seed-driven; a case's id is content-derived (automatic dedup),
+* every random decision in either backend is seed-driven; a case's id is content-derived
+  for automatic deduplication,
 * `SIGINT`/`SIGTERM`: stop generating, drain in-flight tasks, atomically persist queue
   state + seeds + statistics,
 * storage budget enforced by `gc` (never deletes unique repro material or protected cases).
@@ -231,3 +259,6 @@ generate → (stress gate) → N×M compile → PTX/SASS metrics → GPU run ×3
 * The novelty score does not yet persist corpus SASS hashes across runs (per-run only).
 * No float strategies yet (float semantics, ULP and contraction policies are a future
   extension).
+* `generator_ir` uses cross-build consensus rather than an independent CPU oracle, and its
+  standalone CUDA Runtime harness does not currently provide the native runner's device
+  output guard.  Differentials should therefore be confirmed with sanitizers before filing.

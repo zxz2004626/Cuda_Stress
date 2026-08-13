@@ -1,0 +1,81 @@
+# Pipeline-wide configuration (merge target for the --config flag).
+# Most knobs here are read once at startup; per-case behaviour comes from strategies.yaml.
+
+project:
+  root: ""            # empty => directory containing this file's parent (cuda_stress/)
+  run_id: ""          # empty => auto <run>-<timestamp>
+
+generation:
+  generator_version: "1.1.0"  # ISA-constrained balanced inline-PTX generator
+  config_seed: 20260810
+  batch_size: 8              # cases generated per tick in `loop`
+  backlog_target: 64         # keep this many generated-but-uncompiled cases queued
+  max_cases: 0               # 0 = unlimited; loop --max-cases overrides
+  mutation_ratio: 0.35       # fraction of cases that mutate a retained (interesting) seed
+  oracle_workers: 8
+
+compilation:
+  jobs_compile: 8            # bounded worker pool for nvcc/ptxas subprocesses
+  jobs_disasm: 8
+  jobs_generate: 4
+  compile_timeout: 120
+  ptx_timeout: 60
+  disasm_timeout: 60
+  retries: 2                 # retries with exponential backoff on transient failures
+  verify_sass_diversity: true
+
+execution:
+  gpu_devices: []            # empty => autodetect via cuDeviceGetCount
+  gpu_workers_per_device: 1  # serial per GPU by default (isolation / determinism)
+  runs_per_build: 3          # each build executed N times
+  run_timeout: 60
+  runner_restart_after: 0    # 0 => fresh process per run (max isolation)
+  device_memory_guard_words: 8
+
+oracle:
+  comparison_policy: exact_u64
+  verify_input_sensitivity: true   # re-derive expected with a tweaked input; reject if output unchanged
+  reject_on_oracle_mismatch: true
+
+stress_gate:
+  min_ptx_lines: 40
+  min_sass_instructions: 50
+  min_distinct_sass_hashes: 2      # across real ptxas profiles, at least N distinct normalized SASS
+  min_optimization_delta: 0.15     # |SASS_O0 - SASS_O3| instruction-count delta ratio
+  target_opcode_present: true      # strategy-specific opcode must survive (not fully DCE'd)
+  require_input_sensitivity: true
+
+novelty:
+  # retention scoring weights (online corpus evolution)
+  sass_novelty: 1.0
+  optimization_delta: 1.5
+  predicate_pressure: 0.6
+  register_pressure: 0.5
+  control_flow_complexity: 0.5
+  rare_opcode_bonus: 0.7
+  compile_time_penalty: 0.05
+  duplicate_penalty: 2.0
+
+corpus:
+  accepted_dir: corpus/accepted      # retained, high-value testcases (incl. for mutation)
+  differential_dir: corpus/differentials  # POTENTIAL_COMPILER_BUG cases awaiting human review
+  rejected_dir: corpus/rejected
+
+storage:
+  max_total_gb: 40           # overnight: allow hundreds of cases to accumulate
+  keep_passing_sources: 800
+  keep_invalid_samples_per_reason: 20
+  delete_redundant_cubin: true
+  delete_redundant_ptx: true
+  compress_bug_archives: true
+  gc_interval_cases: 25      # run GC every N triaged cases
+
+scheduling:
+  strategy_weights: { predicate_pressure: 1.0, integer_chain: 1.0,
+                      memory_address: 0.8, warp_mixed: 0.8, register_pressure: 0.9,
+                      inline_ptx: 0.9 }
+  adaptive_weights: true     # decay underperforming strategies each cycle
+
+reporting:
+  results_dir: runs
+  ledger: results.jsonl

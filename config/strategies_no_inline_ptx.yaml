@@ -1,0 +1,207 @@
+defaults:
+  block:
+  - 64
+  generator_version: 1.1.0
+  grid:
+  - 1
+  input_words: 256
+  output_words_per_thread: 2
+strategies:
+  inline_ptx:
+    enabled: false
+    variants:
+    - coverage_mode: random
+      max_ptx_isa: '7.3'
+      n_instr: 80
+      n_preds: 4
+      n_regs32: 10
+      n_regs64: 6
+      use_immediates: true
+      use_rare_ops: true
+    - coverage_mode: balanced
+      max_ptx_isa: '7.3'
+      n_instr: 160
+      n_preds: 5
+      n_regs32: 12
+      n_regs64: 6
+      use_immediates: true
+      use_rare_ops: true
+    - coverage_mode: balanced
+      max_ptx_isa: '7.3'
+      n_instr: 220
+      n_preds: 6
+      n_regs32: 16
+      n_regs64: 8
+      use_immediates: false
+      use_rare_ops: true
+    - coverage_mode: balanced
+      max_ptx_isa: '7.3'
+      n_instr: 120
+      n_preds: 4
+      n_regs32: 14
+      n_regs64: 5
+      use_immediates: true
+      use_rare_ops: false
+    - coverage_mode: balanced
+      max_ptx_isa: '7.3'
+      n_instr: 260
+      n_preds: 7
+      n_regs32: 18
+      n_regs64: 9
+      use_immediates: true
+      use_rare_ops: true
+    weight: 0.9
+  integer_chain:
+    enabled: true
+    variants:
+    - boundary_words: 8
+      chain_len: 200
+      use_bfe_bfi: true
+      use_funnelshift: true
+      use_lop3: true
+      use_mulhi: true
+      use_prmt: true
+    - boundary_words: 8
+      chain_len: 400
+      use_bfe_bfi: true
+      use_funnelshift: true
+      use_lop3: true
+      use_mulhi: true
+      use_prmt: false
+    - boundary_words: 4
+      chain_len: 800
+      use_bfe_bfi: true
+      use_funnelshift: true
+      use_lop3: false
+      use_mulhi: false
+      use_prmt: true
+    - boundary_words: 16
+      chain_len: 1200
+      use_bfe_bfi: false
+      use_funnelshift: false
+      use_lop3: true
+      use_mulhi: true
+      use_prmt: false
+    weight: 1.0
+  memory_address:
+    enabled: true
+    variants:
+    - cache_policy: default
+      reads: 32
+      structs: true
+      vectors: true
+      widths:
+      - 8
+      - 32
+      - 64
+    - cache_policy: ca
+      reads: 64
+      structs: true
+      vectors: false
+      widths:
+      - 8
+      - 16
+      - 64
+    - cache_policy: cg
+      reads: 96
+      structs: false
+      vectors: true
+      widths:
+      - 16
+      - 32
+      - 64
+    - cache_policy: cs
+      reads: 128
+      structs: true
+      vectors: true
+      widths:
+      - 8
+      - 16
+      - 32
+      - 64
+    weight: 0.8
+  predicate_pressure:
+    enabled: true
+    variants:
+    - chain_len: 48
+      dup_groups: 4
+      num_comparisons: 32
+      num_diamonds: 12
+      num_folds: 24
+      use_launch_bounds: false
+    - chain_len: 96
+      dup_groups: 6
+      num_comparisons: 64
+      num_diamonds: 24
+      num_folds: 48
+      use_launch_bounds: false
+    - chain_len: 160
+      dup_groups: 8
+      num_comparisons: 96
+      num_diamonds: 36
+      num_folds: 72
+      use_launch_bounds: true
+    - chain_len: 64
+      dup_groups: 5
+      num_comparisons: 48
+      num_diamonds: 16
+      num_folds: 36
+      use_launch_bounds: true
+    weight: 1.0
+  register_pressure:
+    enabled: true
+    variants:
+    - call_style: noinline
+      chains: 4
+      live_vars: 32
+      merge_len: 32
+      variant: none
+    - call_style: inline
+      chains: 4
+      live_vars: 64
+      merge_len: 64
+      variant: launch_bounds
+    - call_style: noinline
+      chains: 6
+      live_vars: 96
+      merge_len: 96
+      variant: maxrregcount
+    - call_style: inline
+      chains: 8
+      live_vars: 128
+      merge_len: 128
+      variant: none
+    weight: 0.9
+  warp_mixed:
+    enabled: true
+    variants:
+    - boundary_words: 8
+      chain_len: 96
+      partial_masks: false
+      warp_ops:
+      - ballot
+      - shfl_idx
+      - any
+    - boundary_words: 8
+      chain_len: 160
+      partial_masks: true
+      warp_ops:
+      - ballot
+      - all
+      - shfl_xor
+    - boundary_words: 8
+      chain_len: 64
+      partial_masks: true
+      warp_ops:
+      - match_any
+      - shfl_up
+      - shfl_down
+    - boundary_words: 8
+      chain_len: 200
+      partial_masks: false
+      warp_ops:
+      - ballot
+      - match_all
+      - shfl_idx
+      - activemask
+    weight: 0.8

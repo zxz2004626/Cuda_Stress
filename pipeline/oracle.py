@@ -15,6 +15,9 @@ from .manifest import case_from_dir
 def recompute_expected(test_dir: Path) -> Dict[str, Any]:
     """Recompute expected.bin from test.cu/input.bin via the strategy's CPU oracle."""
     case = case_from_dir(test_dir)
+    if case.oracle_mode == "cross_build":
+        raise ValueError(
+            f"{case.strategy} has no CPU oracle; use cross-build checksum comparison")
     strat = default_registry().get(case.strategy)
     expected = strat.cpu_oracle(
         input_words=case.input_words, seed=case.kernel_seed, params=case.params,
@@ -45,6 +48,9 @@ def verify_input_sensitivity(test_dir: Path, config_seed: int) -> Dict[str, Any]
     (which would make them near-zero-value for differential testing).
     """
     case = case_from_dir(test_dir)
+    if case.oracle_mode == "cross_build":
+        raise ValueError(
+            "cross-build cases require verify_runtime_input_sensitivity(config, test_dir)")
     strat = default_registry().get(case.strategy)
     # A different input, derived deterministically from the same seeds + 1.
     rng = strat._new_rng(config_seed, case.test_seed + 1)
@@ -61,3 +67,66 @@ def verify_input_sensitivity(test_dir: Path, config_seed: int) -> Dict[str, Any]
         "alt_input_sha256": hashlib.sha256(alt_input).hexdigest(),
         "alt_expected_sha256": hashlib.sha256(alt_expected).hexdigest(),
     }
+
+
+def verify_runtime_input_sensitivity(config, test_dir: Path,
+                                     input_salt: int = 1) -> Dict[str, Any]:
+    """Re-run one stable standalone build with deterministically changed input.
+
+    This is not presented as a CPU oracle.  It only verifies that the checksum
+    observed by the differential pipeline actually depends on runtime input.
+    """
+    from . import executor
+
+    case = case_from_dir(test_dir)
+    if case.execution_mode != "standalone_checksum":
+        raise ValueError("runtime input sensitivity is only defined for standalone cases")
+
+    for build_dir in sorted((test_dir / "builds").glob("*__*")):
+        if not build_dir.is_dir():
+            continue
+        try:
+            tc_id, _profile = build_dir.name.rsplit("__", 1)
+            tc = config.find_toolchain(tc_id)
+        except (ValueError, KeyError):
+            continue
+        if not tc.runnable:
+            continue
+        try:
+            compile_result = json.loads((build_dir / "compile_result.json").read_text())
+        except Exception:  # noqa: BLE001
+            continue
+        if not compile_result.get("ok"):
+            continue
+
+        try:
+            baseline = executor.parse_output_blob(
+                (build_dir / "output_run_1.bin").read_bytes())
+        except OSError:
+            continue
+        if baseline.status != "OK" or baseline.output_words is None:
+            continue
+        devices = config.execution.get("gpu_devices") or [0]
+        changed = executor.run_build(
+            config, tc, case, build_dir, "input_sensitivity", device=int(devices[0]),
+            input_salt=input_salt)
+        if changed.status != "OK" or changed.output_words is None:
+            raise RuntimeError(
+                f"input-sensitivity run failed for {build_dir.name}: "
+                f"{changed.status} {changed.error}")
+
+        baseline_hash = hashlib.sha256(baseline.output_words).hexdigest()
+        changed_hash = hashlib.sha256(changed.output_words).hexdigest()
+        result = {
+            "method": "standalone_input_salt",
+            "representative_build": build_dir.name,
+            "input_salt": int(input_salt) & 0xFFFFFFFF,
+            "input_sensitive": baseline.output_words != changed.output_words,
+            "baseline_output_sha256": baseline_hash,
+            "salted_output_sha256": changed_hash,
+        }
+        (test_dir / "input_sensitivity.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True))
+        return result
+
+    raise RuntimeError("no successful runnable standalone build for input-sensitivity check")

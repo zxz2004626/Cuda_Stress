@@ -140,15 +140,41 @@ class LoopScheduler:
             "test_counter": self._counter,
             "stats": self.stats.to_dict(),
             "seen_case_ids": sorted(self._case_seen)[-5000:],
+            "generation_mode": self.cfg.generation.get("generator", "builtin"),
         }
         self.queue.write_state(state)
 
     # ------------------------------------------------------------------ generation
+    def _generation_strategy_names(self) -> List[str]:
+        mode = str(self.cfg.generation.get("generator", "builtin"))
+        enabled = [
+            name for name in self.registry.names()
+            if bool(self.cfg.strategies.get(name, {}).get("enabled", True))
+        ]
+        if mode == "generator_ir":
+            return ["generator_ir"]
+        if mode == "builtin":
+            return [name for name in enabled if name != "generator_ir"]
+        if mode == "mixed":
+            return list(dict.fromkeys(enabled + ["generator_ir"]))
+        raise ValueError(f"unknown generation.generator mode {mode!r}")
+
+    def _target_sm(self) -> str:
+        configured = self.cfg.generation.get("target_sm")
+        if configured:
+            return str(configured)
+        if self.cfg.toolchains:
+            return str(self.cfg.toolchains[0].arch)
+        return "sm_86"
+
     def _next_strategy(self) -> str:
         w = self.stats.strategy_weights
-        names = [n for n in self.registry.names() if n in w and w.get(n, 0) > 0]
+        available = self._generation_strategy_names()
+        names = [n for n in available if n in w and w.get(n, 0) > 0]
         if not names:
-            names = self.registry.names()
+            names = available
+        if not names:
+            raise RuntimeError("no enabled generation strategies")
         total = sum(w.get(n, 1.0) for n in names)
         r = random.uniform(0, total)
         upto = 0.0
@@ -177,7 +203,7 @@ class LoopScheduler:
             case = self.registry.get(strategy_name).generate(
                 config_seed=self.config_seed, test_seed=test_seed, params=params,
                 gen_version=str(self.cfg.generation.get("generator_version", "1.0.0")),
-                target_sm="sm_86")
+                target_sm=self._target_sm())
         except Exception:  # noqa: BLE001
             return None
         if not case.valid:
@@ -282,6 +308,8 @@ class LoopScheduler:
             case = _case_from_dir(test_dir)
             self._run_futures[case_id] = {}
             runs = int(self.cfg.execution.get("runs_per_build", 3))
+            if self.cfg.execution.get("adaptive_rerun", False):
+                runs = 1  # fast pass; a disagreement triggers a full re-run at triage
             for tc in self.cfg.runnable_toolchains():
                 for prof in self.cfg.profiles:
                     key = compiler.build_key(tc.id, prof.name)
@@ -303,10 +331,37 @@ class LoopScheduler:
             self.stats.ran += 1
 
     # ------------------------------------------------------------------ triage
+    def _rerun_case(self, test_dir: Path, case: GeneratedCase, runs: int) -> None:
+        """Synchronously re-run every runnable build `runs` times (confirmation pass).
+
+        Only entered when a single-run fast pass saw builds disagree, so the cost is
+        paid exactly when it matters (a candidate differential) rather than on the
+        common all-agree path.  Serialized on the device gate so it cannot contend
+        with the next case already dispatched to the GPU.
+        """
+        with self.device_gate.acquire(self.devices[0]):
+            for tc in self.cfg.runnable_toolchains():
+                for prof in self.cfg.profiles:
+                    build_dir = test_dir / "builds" / compiler.build_key(tc.id, prof.name)
+                    if not build_dir.exists():
+                        continue
+                    for i in range(1, runs + 1):
+                        executor.run_build(self.cfg, tc, case, build_dir, i,
+                                           device=self.devices[0])
+
     def _triage_one(self, case_id: str) -> None:
         test_dir = self._test_dir(case_id)
         case = _case_from_dir(test_dir)
-        result = comparator.compare_matrix(self.cfg, case, test_dir)
+        runs = int(self.cfg.execution.get("runs_per_build", 3))
+        if self.cfg.execution.get("adaptive_rerun", False):
+            result = comparator.compare_matrix(self.cfg, case, test_dir, runs=1)
+            if result.status == Status.POTENTIAL_COMPILER_BUG:
+                # A single flaky run must never masquerade as a wrong-code regression:
+                # re-run the full matrix `runs` times and re-compare before deciding.
+                self._rerun_case(test_dir, case, runs)
+                result = comparator.compare_matrix(self.cfg, case, test_dir, runs=runs)
+        else:
+            result = comparator.compare_matrix(self.cfg, case, test_dir)
         metrics_list = stress_metrics.collect_build_metrics(test_dir)
         gate = stress_metrics.evaluate_stress_gate(self.cfg, case, test_dir, metrics_list)
         result.stress_gate = gate
@@ -323,7 +378,10 @@ class LoopScheduler:
         if result.category in (Category.INTERESTING, Category.POTENTIAL_BUG) and \
            self.cfg.oracle.get("verify_input_sensitivity", True):
             try:
-                sens = oracle_mod.verify_input_sensitivity(test_dir, self.config_seed)
+                if case.oracle_mode == "cross_build":
+                    sens = oracle_mod.verify_runtime_input_sensitivity(self.cfg, test_dir)
+                else:
+                    sens = oracle_mod.verify_input_sensitivity(test_dir, self.config_seed)
                 result.stress_gate["input_sensitive"] = sens["input_sensitive"]
                 if not sens["input_sensitive"]:
                     result.category = Category.REDUNDANT
@@ -372,6 +430,7 @@ class LoopScheduler:
         archive.init_run(self.run_dir, self.cfg)
         self.queue.write_run_id(self.run_dir.name)
         print(f"[loop] run_id={self.run_dir.name}  seed={self.config_seed}  "
+              f"generator={self.cfg.generation.get('generator', 'builtin')}  "
               f"devices={self.devices}  profiles={[p.name for p in self.cfg.profiles]}  "
               f"toolchains={[t.id for t in self.cfg.toolchains]}")
 
@@ -437,7 +496,26 @@ def run_single_case(config: Config, test_dir: Path, runs: int = 3,
                if (not toolchain_ids) or t.id in toolchain_ids]
     prof_list = [p for p in config.profiles
                  if (not profile_names) or p.name in profile_names]
+    known_tc = {t.id for t in config.toolchains}
+    known_profiles = {p.name for p in config.profiles}
+    missing_tc = sorted(set(toolchain_ids or []) - known_tc)
+    missing_profiles = sorted(set(profile_names or []) - known_profiles)
+    if missing_tc or missing_profiles:
+        detail = []
+        if missing_tc:
+            detail.append(f"unknown toolchains: {missing_tc}")
+        if missing_profiles:
+            detail.append(f"unknown profiles: {missing_profiles}")
+        raise ValueError("; ".join(detail))
+    if not tc_list or not prof_list:
+        raise ValueError("the selected compile matrix is empty")
     extra_flags = case.params.get("ptxas_extra", []) if case.params else []
+    (test_dir / "execution_plan.json").write_text(json.dumps({
+        "toolchains": [tc.id for tc in tc_list],
+        "profiles": [p.name for p in prof_list],
+        "runs_per_build": max(1, int(runs)),
+        "device": int(device),
+    }, indent=2, sort_keys=True))
 
     summary = {"case_id": case.case_id(), "builds": {}}
     for tc in tc_list:
@@ -482,10 +560,20 @@ def worker_ptx(config: Config, tc: Toolchain, ptx_dir: Path, src: Path) -> Dict[
     import shutil
     ptx_dir.mkdir(parents=True, exist_ok=True)
     ptx_path = ptx_dir / "kernel.ptx"
-    rec = compiler.nvcc_ptx(tc, src, ptx_path,
-                            timeout=int(config.compilation.get("ptx_timeout", 60)))
+    try:
+        manifest = json.loads((src.parent / "manifest.json").read_text())
+    except Exception:  # noqa: BLE001
+        manifest = {}
+    if manifest.get("execution_mode", "driver_kernel") == "standalone_checksum":
+        rec = compiler.nvcc_standalone_ptx(
+            tc, src, ptx_path,
+            timeout=int(config.compilation.get("ptx_timeout", 60)))
+    else:
+        rec = compiler.nvcc_ptx(
+            tc, src, ptx_path,
+            timeout=int(config.compilation.get("ptx_timeout", 60)))
     # copy into every build dir for archive consistency (per spec, kernel.ptx per build)
-    builds_root = ptx_dir.parent / "builds"
+    builds_root = ptx_dir.parent.parent / "builds"
     if rec.ok and builds_root.exists():
         for b in builds_root.glob("*__*"):
             shutil.copy2(ptx_path, b / "kernel.ptx")
@@ -503,8 +591,15 @@ def worker_build(config: Config, tc: Toolchain, prof, ptx_dir: Path, test_dir: P
     if ptx_src.exists():
         shutil.copy2(ptx_src, build_dir / "kernel.ptx")
     else:
-        compiler.nvcc_ptx(tc, test_dir / "test.cu", build_dir / "kernel.ptx",
-                          timeout=int(config.compilation.get("ptx_timeout", 60)))
+        try:
+            manifest = json.loads((test_dir / "manifest.json").read_text())
+        except Exception:  # noqa: BLE001
+            manifest = {}
+        ptx_fn = (compiler.nvcc_standalone_ptx
+                  if manifest.get("execution_mode") == "standalone_checksum"
+                  else compiler.nvcc_ptx)
+        ptx_fn(tc, test_dir / "test.cu", build_dir / "kernel.ptx",
+               timeout=int(config.compilation.get("ptx_timeout", 60)))
     result = compiler.compile_build(config, tc, prof, test_dir, build_dir, extra_flags,
                                     timeout=int(config.compilation.get("compile_timeout", 120)))
     (build_dir / "compile_result.json").write_text(json.dumps(result, indent=2))

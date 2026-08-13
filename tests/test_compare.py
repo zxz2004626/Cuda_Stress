@@ -38,6 +38,16 @@ def _make_case(tmp_path):
     return case, test_dir
 
 
+def _make_cross_build_case(tmp_path):
+    case, test_dir = _make_case(tmp_path)
+    case.execution_mode = "standalone_checksum"
+    case.oracle_mode = "cross_build"
+    case.comparison_policy = "cross_build_checksum_u64"
+    case.expected_bytes = b""
+    (test_dir / "expected.bin").write_bytes(b"")
+    return case, test_dir
+
+
 def _add_build(test_dir, key, words, ok=True, runs=(1, 2, 3)):
     b = test_dir / "builds" / key
     b.mkdir(parents=True, exist_ok=True)
@@ -103,6 +113,71 @@ def test_all_agree_but_wrong_oracle(tmp_path):
     r = comparator.compare_matrix(_cfg_runnable_any(), case, td)
     assert r.status == Status.ORACLE_MISMATCH
     assert r.category == Category.POTENTIAL_BUG
+
+
+def test_cross_build_consensus_has_no_synthetic_oracle(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [0x123456789ABCDEF0])
+    _add_build(td, "cuda-12.6__O1", [0x123456789ABCDEF0])
+    cfg = _cfg_runnable_any()
+    cfg.profiles = [OptimizationProfile("O0", 0), OptimizationProfile("O1", 1)]
+    r = comparator.compare_matrix(cfg, case, td)
+    assert r.status == Status.PASS
+    assert r.oracle_hash is None
+    assert "no CPU oracle" in r.note
+
+
+def test_cross_build_stable_divergence_is_differential(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [1])
+    _add_build(td, "cuda-12.6__O1", [2])
+    cfg = _cfg_runnable_any()
+    cfg.profiles = [OptimizationProfile("O0", 0), OptimizationProfile("O1", 1)]
+    r = comparator.compare_matrix(cfg, case, td)
+    assert r.status == Status.POTENTIAL_COMPILER_BUG
+    assert r.category == Category.POTENTIAL_BUG
+    assert len(r.diff_detail["distinct_outputs"]) == 2
+
+
+def test_cross_build_consensus_does_not_hide_failed_matrix_arm(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [7])
+    _add_build(td, "cuda-12.6__O1", [], ok=False)
+    cfg = _cfg_runnable_any()
+    cfg.profiles = [OptimizationProfile("O0", 0), OptimizationProfile("O1", 1)]
+    r = comparator.compare_matrix(cfg, case, td)
+    assert r.status == Status.COMPILE_FAILED
+
+
+def test_cross_build_missing_matrix_arm_is_incomplete(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [7])
+    cfg = _cfg_runnable_any()
+    cfg.profiles = [OptimizationProfile("O0", 0), OptimizationProfile("O1", 1)]
+    r = comparator.compare_matrix(cfg, case, td)
+    assert r.status == Status.INCOMPLETE_MATRIX
+    assert r.builds["cuda-12.6__O1"].status == Status.INCOMPLETE_MATRIX
+
+
+def test_stale_profile_cannot_create_a_differential(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [7])
+    _add_build(td, "cuda-12.6__old", [99])
+    r = comparator.compare_matrix(_cfg_runnable_any(), case, td)
+    assert r.status == Status.INCOMPLETE_MATRIX
+    assert r.builds["cuda-12.6__old"].status == Status.UNSUPPORTED
+
+
+def test_execution_plan_controls_repeat_count(tmp_path):
+    case, td = _make_cross_build_case(tmp_path)
+    _add_build(td, "cuda-12.6__O0", [7], runs=(1,))
+    (td / "execution_plan.json").write_text(json.dumps({
+        "toolchains": ["cuda-12.6"], "profiles": ["O0"],
+        "runs_per_build": 1,
+    }))
+    r = comparator.compare_matrix(_cfg_runnable_any(), case, td)
+    assert r.status == Status.INCOMPLETE_MATRIX
+    assert "at least two" in r.note
 
 
 def test_unsupported_toolchain(tmp_path):

@@ -6,6 +6,10 @@ project:
   run_id: ""          # empty => auto <run>-<timestamp>
 
 generation:
+  # builtin keeps the original fixed-ABI strategies.  Use generator_ir on the
+  # CLI (or set this to generator_ir) for the standalone IR/checksum backend;
+  # mixed draws from every enabled original strategy plus generator_ir.
+  generator: builtin
   generator_version: "1.1.0"  # ISA-constrained balanced inline-PTX generator
   config_seed: 20260810
   batch_size: 8              # cases generated per tick in `loop`
@@ -27,7 +31,8 @@ compilation:
 execution:
   gpu_devices: []            # empty => autodetect via cuDeviceGetCount
   gpu_workers_per_device: 1  # serial per GPU by default (isolation / determinism)
-  runs_per_build: 3          # each build executed N times
+  runs_per_build: 3          # confirmation run count when adaptive_rerun is on
+  adaptive_rerun: true       # fast pass runs each build once; re-run 3x only on disagreement
   run_timeout: 60
   runner_restart_after: 0    # 0 => fresh process per run (max isolation)
   device_memory_guard_words: 8
@@ -68,7 +73,7 @@ storage:
 scheduling:
   strategy_weights: { predicate_pressure: 1.0, integer_chain: 1.0,
                       memory_address: 0.8, warp_mixed: 0.8, register_pressure: 0.9,
-                      inline_ptx: 0.9 }
+                      inline_ptx: 0.9, generator_ir: 0.7 }
   adaptive_weights: true     # decay underperforming strategies each cycle
 
 reporting:
