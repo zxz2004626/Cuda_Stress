@@ -377,29 +377,15 @@ class HostHarness:
             w.line('if (!h_output_fp) { fprintf(stderr, "malloc failed\\n"); return 1; }')
         w.blank()
 
-        # Deterministic input fill
+        # Deterministic input fill (deferred into the run_pass lambda emitted below,
+        # so the input-sensitivity re-run can reuse this process instead of forking
+        # a second one and paying CUDA context init again).
         dist = cfg.input_dist if cfg.input_dist in _INPUT_INIT else "hash"
-        w.line(f"// Deterministic input initialization (dist={dist})")
+        w.line(f"// Deterministic input initialization (dist={dist}) happens in run_pass()")
         w.line('const char *input_salt_text = getenv("CUDA_STRESS_INPUT_SALT");')
         w.line("const unsigned long long input_salt = "
                "(input_salt_text && *input_salt_text) "
                "? strtoull(input_salt_text, NULL, 0) : 0ULL;")
-        w.line("for (int i = 0; i < in_size; i++) {")
-        w.kx_indent()
-        w.line(_INPUT_INIT[dist])
-        w.line("if (input_salt != 0ULL) {")
-        w.kx_indent()
-        w.line("unsigned long long z = input_salt + 0x9e3779b97f4a7c15ULL "
-               "* ((unsigned long long)(unsigned int)i + 1ULL);")
-        w.line("z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;")
-        w.line("z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;")
-        w.line("z ^= z >> 31;")
-        w.line("unsigned int salt_word = (unsigned int)(z ^ (z >> 32));")
-        w.line("h_input[i] ^= salt_word ? salt_word : 0xa5a5a5a5u;")
-        w.kx_dedent()
-        w.line("}")
-        w.kx_dedent()
-        w.line("}")
         w.blank()
 
         # Device allocations
@@ -407,8 +393,6 @@ class HostHarness:
         w.line("unsigned int *d_input = NULL, *d_output = NULL;")
         w.line(f"{check}({api.malloc}((void**)&d_input, in_size * sizeof(unsigned int)));")
         w.line(f"{check}({api.malloc}((void**)&d_output, buf_size * sizeof(unsigned int)));")
-        w.line(f"{check}({api.memcpy}(d_input, h_input, in_size * sizeof(unsigned int), {api.memcpy_h2d}));")
-        w.line(f"{check}({api.memset}(d_output, 0, buf_size * sizeof(unsigned int)));")
         if fp_param is not None:
             fty = "double" if isinstance(fp_param.gtype.base, TDouble) else "float"
             w.line(f"{fty} *d_output_fp = NULL;")
@@ -451,13 +435,33 @@ class HostHarness:
             self._harness_simple(launch)
         w.blank()
 
-        # Deterministic checksum pass
-        w.line("// Deterministic checksum: reset output, run once, hash on host")
+        # Deterministic checksum pass, wrapped in a lambda so both the normal
+        # (salt=0) run and the input-sensitivity (salt=1) run share one process
+        # and one CUDA context.  Each invocation prints one "checksum=<u64>" line.
+        w.line("// Deterministic checksum pass (run_pass is reusable in-process)")
+        w.line("auto run_pass = [&](unsigned long long salt) -> int {")
+        w.kx_indent()
+        w.line("for (int i = 0; i < in_size; i++) {")
+        w.kx_indent()
+        w.line(_INPUT_INIT[dist])
+        w.line("if (salt != 0ULL) {")
+        w.kx_indent()
+        w.line("unsigned long long z = salt + 0x9e3779b97f4a7c15ULL "
+               "* ((unsigned long long)(unsigned int)i + 1ULL);")
+        w.line("z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;")
+        w.line("z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;")
+        w.line("z ^= z >> 31;")
+        w.line("unsigned int salt_word = (unsigned int)(z ^ (z >> 32));")
+        w.line("h_input[i] ^= salt_word ? salt_word : 0xa5a5a5a5u;")
+        w.kx_dedent()
+        w.line("}")
+        w.kx_dedent()
+        w.line("}")
+        w.line(f"{check}({api.memcpy}(d_input, h_input, in_size * sizeof(unsigned int), {api.memcpy_h2d}));")
         w.line(f"{check}({api.memset}(d_output, 0, buf_size * sizeof(unsigned int)));")
         w.line(f"{launch};")
         w.line(f"{check}({api.get_last_error}());")
         w.line(f"{check}({api.device_sync}());")
-        w.blank()
         w.line(f"{check}({api.memcpy}(h_output, d_output, buf_size * sizeof(unsigned int), {api.memcpy_d2h}));")
         w.line("unsigned long long hash = 42;")
         w.line("for (int i = 0; i < buf_size; i++) {")
@@ -467,6 +471,12 @@ class HostHarness:
         w.kx_dedent()
         w.line("}")
         w.line('printf("checksum=%llu\\n", hash);')
+        w.line("return 0;")
+        w.kx_dedent()
+        w.line("};")
+        w.blank()
+        w.line("run_pass(input_salt);")
+        w.line('if (getenv("CUDA_STRESS_ALSO_SALT")) { run_pass(1ULL); }')
         w.blank()
 
         # Cleanup

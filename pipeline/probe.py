@@ -36,7 +36,7 @@ def _probe_source() -> str:
         test_seed=0xC0FFEE,
         params={"num_comparisons": 64, "chain_len": 120, "num_diamonds": 24,
                 "num_folds": 48, "dup_groups": 6, "use_launch_bounds": False},
-        gen_version="1.0.0", target_sm="sm_86")
+        gen_version="1.0.0", target_sm="sm_75")
     return case.source
 
 
@@ -226,18 +226,33 @@ def load_probe_cache() -> Optional[Dict[str, Any]]:
         return None
 
 
-def save_probe_cache(probes: List[ToolchainProbe]) -> None:
+def save_probe_cache(probes: List[ToolchainProbe], cfg: Config) -> None:
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     CACHE_PATH.write_text(json.dumps({
-        "signature": env_signature(),
+        "signature": probe_signature(cfg),
         "probes": [p.as_dict() for p in probes],
     }, indent=2))
 
 
+def probe_signature(cfg: Config) -> str:
+    """Cache key: environment (GPU/driver/cuda dirs) plus the configured toolchains.
+
+    The toolchain list is folded in so editing config/toolchains.yaml (nvcc path,
+    arch, ccbin, ...) invalidates a stale probe cache instead of reusing it.
+    """
+    h = hashlib.sha256()
+    h.update(env_signature().encode())
+    for tc in cfg.toolchains:
+        h.update(
+            f"{tc.id}|{tc.nvcc}|{tc.ptxas}|{tc.arch}|{tc.ccbin}|{int(tc.runnable)}"
+            .encode())
+    return h.hexdigest()[:16]
+
+
 def cached_probes(cfg: Config, force: bool = False) -> List[ToolchainProbe]:
-    """Probe once, then reuse the cache until the environment changes."""
+    """Probe once, then reuse the cache until the environment or toolchains change."""
     cache = load_probe_cache()
-    if cache and cache.get("signature") == env_signature() and not force:
+    if cache and cache.get("signature") == probe_signature(cfg) and not force:
         probes = []
         for p in cache["probes"]:
             p = dict(p)
@@ -245,7 +260,7 @@ def cached_probes(cfg: Config, force: bool = False) -> List[ToolchainProbe]:
             probes.append(ToolchainProbe(**p))
         return probes
     probes = probe_all(cfg)
-    save_probe_cache(probes)
+    save_probe_cache(probes, cfg)
     return probes
 
 
@@ -284,20 +299,27 @@ def doctor_report(cfg: Config, probes: List[ToolchainProbe], gpu_info: Dict[str,
     return "\n".join(lines)
 
 
-def get_gpu_info() -> Dict[str, Any]:
+def get_gpu_info(cfg: Optional[Config] = None) -> Dict[str, Any]:
     runner = Path(__file__).parent.parent / "native" / "cuda_runner"
     info = {"name": "?", "major": "?", "minor": "?", "sm_count": "?", "mem_mb": "?",
             "driver_version": "?", "present": False}
     if not runner.exists():
         return info
+    tc = (cfg.toolchains[0] if cfg and cfg.toolchains else None)
+    nvcc = tc.nvcc if tc else "/usr/local/cuda-11.7/bin/nvcc"
+    arch = tc.arch if tc else "sm_75"
+    ccbin = tc.ccbin if tc else "/usr/bin/g++-9"
     import tempfile
     work = Path(tempfile.mkdtemp(prefix="cuda_stress_gpu_"))
     cubin = work / "k.cubin"
     src = work / "k.cu"
     src.write_text(PROBE_KERNEL)
     env = dict(os.environ)
-    r = subprocess.run(["/usr/local/cuda-12.1/bin/nvcc", "-arch=sm_86", "-cubin", "-o", str(cubin), str(src)],
-                       capture_output=True, text=True, timeout=120, env=env)
+    if tc:
+        env = isolated_env(tc)
+    argv = [nvcc, f"-arch={arch}", "-ccbin", ccbin, "-std=c++14", "-cubin",
+            "-o", str(cubin), str(src)]
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env)
     if r.returncode != 0:
         return info
     inp = work / "in.bin"

@@ -102,26 +102,24 @@ def verify_runtime_input_sensitivity(config, test_dir: Path,
         try:
             baseline = executor.parse_output_blob(
                 (build_dir / "output_run_1.bin").read_bytes())
+            salted = executor.parse_output_blob(
+                (build_dir / "output_run_input_sensitivity.bin").read_bytes())
         except OSError:
             continue
         if baseline.status != "OK" or baseline.output_words is None:
             continue
-        devices = config.execution.get("gpu_devices") or [0]
-        changed = executor.run_build(
-            config, tc, case, build_dir, "input_sensitivity", device=int(devices[0]),
-            input_salt=input_salt)
-        if changed.status != "OK" or changed.output_words is None:
+        if salted.status != "OK" or salted.output_words is None:
             raise RuntimeError(
-                f"input-sensitivity run failed for {build_dir.name}: "
-                f"{changed.status} {changed.error}")
+                f"input-sensitivity data missing for {build_dir.name}: "
+                f"{salted.status} {salted.error}")
 
         baseline_hash = hashlib.sha256(baseline.output_words).hexdigest()
-        changed_hash = hashlib.sha256(changed.output_words).hexdigest()
+        changed_hash = hashlib.sha256(salted.output_words).hexdigest()
         result = {
             "method": f"{case.execution_mode}_input_salt",
             "representative_build": build_dir.name,
             "input_salt": int(input_salt) & 0xFFFFFFFF,
-            "input_sensitive": baseline.output_words != changed.output_words,
+            "input_sensitive": baseline.output_words != salted.output_words,
             "baseline_output_sha256": baseline_hash,
             "salted_output_sha256": changed_hash,
         }
