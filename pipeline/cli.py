@@ -252,7 +252,14 @@ def cmd_compare(args) -> int:
     print(f"category   : {result.category}")
     print(f"note       : {result.note}")
     for key, br in sorted(result.builds.items()):
-        print(f"  {key:<28} {br.status:<22} compile={br.compile_ok} stable={br.stable} "
+        val = br.run_output_values[0] if br.run_output_values and br.run_output_values[0] is not None else None
+        if val is not None:
+            out = str(val)
+        elif br.run_output_hashes and br.run_output_hashes[0]:
+            out = br.run_output_hashes[0][:8] + " (hash)"
+        else:
+            out = "-"
+        print(f"  {key:<28} {br.status:<22} out={out} compile={br.compile_ok} stable={br.stable} "
               f"regs={br.ptxas_registers} runs={br.run_statuses}")
     return 0
 

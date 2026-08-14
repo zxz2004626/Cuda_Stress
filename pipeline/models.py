@@ -75,6 +75,7 @@ class BuildResult:
     runnable_toolchain: bool = True
     run_statuses: List[str] = field(default_factory=list)  # per-repetition status
     run_output_hashes: List[str] = field(default_factory=list)
+    run_output_values: List[Optional[int]] = field(default_factory=list)  # raw u64 (checksum modes)
     run_output_files: List[str] = field(default_factory=list)
     stable: bool = False          # all repetitions produced identical outputs
     status: str = Status.INCOMPLETE_MATRIX

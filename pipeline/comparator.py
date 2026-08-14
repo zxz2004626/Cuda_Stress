@@ -70,6 +70,7 @@ def compare_build(config: Config, case: GeneratedCase, tc_id: str, profile: str,
         outputs.append(words)
     br.run_statuses = statuses
     br.run_output_hashes = [hashlib.sha256(o).hexdigest() if o else None for o in outputs]
+    br.run_output_values = [int.from_bytes(o, "little") if o and len(o) == 8 else None for o in outputs]
 
     if any(s != "OK" for s in statuses):
         if any(s == "TIMEOUT" for s in statuses):
