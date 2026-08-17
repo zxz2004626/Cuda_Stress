@@ -17,7 +17,7 @@ from generator_ir.ir.typedecl import (
     TInt, TUInt, TLong, TULong, THalf, TBF16, TFloat, TDouble,
     TVec, TArray, TStruct, TPointer, TQualified,
 )
-from generator_ir.ir.operators import SafeOp
+from generator_ir.ir.operators import Arith, SafeOp
 from generator_ir.ir.nodes import (
     Expr, Lit, Var, ThreadBuiltin, BinOp, RelOp, LogicOp, UnOp, Select,
     Cast, Fma, SafeBin, Subscript, Member, AddrOf, Deref, Call, Atomic,
@@ -201,6 +201,13 @@ class BaseEmitter:
         if isinstance(e, ThreadBuiltin):
             return self._kx_thread_builtin(e)
         if isinstance(e, BinOp):
+            # Raw `*` on integer operands promotes to (signed) int and overflows
+            # (UB) whenever the product exceeds INT_MAX.  Route every integer
+            # multiply through GPU_SMUL, which computes in unsigned long long and
+            # truncates, so the result is defined (mod 2^N) for signed and narrow
+            # unsigned types alike.
+            if e.op is Arith.MUL:
+                return f"GPU_SMUL({self.expr(e.lhs)}, {self.expr(e.rhs)})"
             return f"({self.expr(e.lhs)} {e.op.symbol} {self.expr(e.rhs)})"
         if isinstance(e, RelOp):
             return f"({self.expr(e.lhs)} {e.op.symbol} {self.expr(e.rhs)})"

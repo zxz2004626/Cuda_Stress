@@ -1,0 +1,99 @@
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+	code for sm_75
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+	code for sm_75
+		Function : _Z11kernel_mainPja
+	.headerflags    @"EF_CUDA_SM75 EF_CUDA_PTX_SM(EF_CUDA_SM75)"
+        /*0000*/                   IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;        /* 0x00000a00ff017624 */
+                                                                                  /* 0x000fc400078e00ff */
+        /*0010*/                   S2R R5, SR_TID.X ;                             /* 0x0000000000057919 */
+                                                                                  /* 0x000e220000002100 */
+        /*0020*/                   IMAD.MOV.U32 R4, RZ, RZ, 0x55555555 ;          /* 0x55555555ff047424 */
+                                                                                  /* 0x000fe200078e00ff */
+        /*0030*/                   UMOV UR4, 0xa34ac3cb ;                         /* 0xa34ac3cb00047882 */
+                                                                                  /* 0x000fe40000000000 */
+        /*0040*/                   S2R R0, SR_CTAID.X ;                           /* 0x0000000000007919 */
+                                                                                  /* 0x000e620000002500 */
+        /*0050*/                   ULDC UR5, c[0x0][0x4] ;                        /* 0x0000010000057ab9 */
+                                                                                  /* 0x000fe20000000800 */
+        /*0060*/                   PRMT RZ, R4, 0x7772, RZ ;                      /* 0x0000777204ff7816 */
+                                                                                  /* 0x000fe200000000ff */
+        /*0070*/                   USHF.R.W.U32.HI UR4, URZ, UR5, UR4 ;           /* 0x000000053f047299 */
+                                                                                  /* 0x000fc60008011e04 */
+        /*0080*/                   SEL R4, RZ, 0x31, P1 ;                         /* 0x00000031ff047807 */
+                                                                                  /* 0x000fc80000800000 */
+        /*0090*/                   LOP3.LUT R4, R4, c[0x0][0x4], RZ, 0x3c, !PT ;  /* 0x0000010004047a12 */
+                                                                                  /* 0x000fc800078e3cff */
+        /*00a0*/                   SHF.R.U32 R4, RZ, 0xf, R4 ;                    /* 0x0000000fff047819 */
+                                                                                  /* 0x000fe40000001604 */
+        /*00b0*/                   ISETP.NE.AND P0, PT, R5, RZ, PT ;              /* 0x000000ff0500720c */
+                                                                                  /* 0x001fe20003f05270 */
+        /*00c0*/                   IMAD R0, R0, c[0x0][0x0], R5 ;                 /* 0x0000000000007a24 */
+                                                                                  /* 0x002fca00078e0205 */
+        /*00d0*/                   ISETP.NE.AND P2, PT, R0, 0x100, PT ;           /* 0x000001000000780c */
+                                                                                  /* 0x000fcc0003f45270 */
+        /*00e0*/               @P0 LDC.U8 R2, c[0x0][RZ] ;                        /* 0x00000000ff020b82 */
+                                                                                  /* 0x000e300000000000 */
+        /*00f0*/               @P0 LDC.U8 R3, c[0x0][0x168] ;                     /* 0x00005a00ff030b82 */
+                                                                                  /* 0x000e620000000000 */
+        /*0100*/               @P0 PRMT R2, R2, 0x8880, RZ ;                      /* 0x0000888002020816 */
+                                                                                  /* 0x001fe400000000ff */
+        /*0110*/               @P0 PRMT R3, R3, 0x8880, RZ ;                      /* 0x0000888003030816 */
+                                                                                  /* 0x002fc800000000ff */
+        /*0120*/               @P0 ISETP.GE.AND P1, PT, R2, R3, PT ;              /* 0x000000030200020c */
+                                                                                  /* 0x000fe20003f26270 */
+        /*0130*/                   IMAD.MOV.U32 R2, RZ, RZ, RZ ;                  /* 0x000000ffff027224 */
+                                                                                  /* 0x000fe200078e00ff */
+        /*0140*/               @P0 SHF.R.W.U32.HI R3, RZ, R0, R0 ;                /* 0x00000000ff030219 */
+                                                                                  /* 0x000fc80000011e00 */
+        /*0150*/               @P0 LOP3.LUT R3, R3, 0x25, RZ, 0x3c, !PT ;         /* 0x0000002503030812 */
+                                                                                  /* 0x000fc800078e3cff */
+        /*0160*/               @P0 SEL R2, R3, RZ, !P1 ;                          /* 0x000000ff03020207 */
+                                                                                  /* 0x000fe40004800000 */
+        /*0170*/                   SHF.R.U32.HI R3, RZ, 0xc, R4 ;                 /* 0x0000000cff037819 */
+                                                                                  /* 0x000fc80000011604 */
+        /*0180*/                   LOP3.LUT R0, R3, UR4, R2, 0x96, !PT ;          /* 0x0000000403007c12 */
+                                                                                  /* 0x000fe2000f8e9602 */
+        /*0190*/               @P2 EXIT ;                                         /* 0x000000000000294d */
+                                                                                  /* 0x000fee0003800000 */
+        /*01a0*/                   LOP3.LUT R0, R0, 0xff, RZ, 0xc0, !PT ;         /* 0x000000ff00007812 */
+                                                                                  /* 0x000fe200078ec0ff */
+        /*01b0*/                   ULDC.64 UR4, c[0x0][0x160] ;                   /* 0x0000580000047ab9 */
+                                                                                  /* 0x000fce0000000a00 */
+        /*01c0*/                   STG.E.SYS [UR4], R0 ;                          /* 0x00000000ff007986 */
+                                                                                  /* 0x000fe2000c10e904 */
+        /*01d0*/                   EXIT ;                                         /* 0x000000000000794d */
+                                                                                  /* 0x000fea0003800000 */
+        /*01e0*/                   BRA 0x1e0;                                     /* 0xfffffff000007947 */
+                                                                                  /* 0x000fc0000383ffff */
+        /*01f0*/                   NOP;                                           /* 0x0000000000007918 */
+                                                                                  /* 0x000fc00000000000 */
+		..........
+
+
+
+Fatbin ptx code:
+================
+arch = sm_75
+code version = [7,4]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = -O3  

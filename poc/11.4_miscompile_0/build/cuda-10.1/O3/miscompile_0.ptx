@@ -1,0 +1,77 @@
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+Fatbin ptx code:
+================
+arch = sm_75
+code version = [6,4]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = -O3  
+
+
+
+
+
+
+
+
+.version 6.4
+.target sm_75
+.address_size 64
+
+
+
+.visible .entry _Z11kernel_mainPji(
+.param .u64 _Z11kernel_mainPji_param_0,
+.param .u32 _Z11kernel_mainPji_param_1
+)
+{
+.reg .pred %p<2>;
+.reg .b32 %r<10>;
+.reg .b64 %rd<9>;
+
+
+ld.param.u64 %rd1, [_Z11kernel_mainPji_param_0];
+ld.param.u32 %r1, [_Z11kernel_mainPji_param_1];
+mov.u32 %r2, %tid.x;
+setp.ne.s32	%p1, %r2, 0;
+@%p1 bra BB0_2;
+
+cvta.to.global.u64 %rd2, %rd1;
+mov.u32 %r3, %ctaid.x;
+add.s32 %r4, %r3, 10;
+and.b32 %r5, %r4, 31;
+mov.u32 %r6, 1;
+shr.u32 %r7, %r6, %r5;
+cvt.u64.u32	%rd3, %r7;
+neg.s64 %rd4, %rd3;
+cvt.s64.s32	%rd5, %r1;
+bfe.u64 %rd6, %rd4, 31, 1;
+bfi.b64 %rd7, %rd5, %rd6, 31, 33;
+add.s32 %r8, %r3, 1;
+and.b32 %r9, %r8, 63;
+shr.u64 %rd8, %rd7, %r9;
+st.global.u32 [%rd2], %rd8;
+
+BB0_2:
+ret;
+}
+
+
