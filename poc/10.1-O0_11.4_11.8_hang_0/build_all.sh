@@ -5,7 +5,7 @@ THIS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SRC=${SRC:-"$THIS_DIR/runtime_minimal.cu"}
 BUILD_DIR=${BUILD_DIR:-"$THIS_DIR/build"}
 ARCH=${ARCH:-sm_75}
-BINARY_NAME=${BINARY_NAME:-miscompile_0}
+BINARY_NAME=${BINARY_NAME:-hang_0}
 
 CUDA_10_1=${CUDA_10_1:-/export/d3/xzhanglb/nvcc-toolkit/cuda-10-1}
 CUDA_11_4=${CUDA_11_4:-/export/d3/xzhanglb/nvcc-toolkit/cuda-11-4}

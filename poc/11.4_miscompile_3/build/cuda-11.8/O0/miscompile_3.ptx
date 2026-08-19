@@ -1,0 +1,208 @@
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+Fatbin ptx code:
+================
+arch = sm_75
+code version = [7,8]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = -O0  
+
+
+
+
+
+
+
+
+.version 7.8
+.target sm_75
+.address_size 64
+
+
+.global .align 8 .b8 arr_0[88];
+
+.visible .entry _Z11kernel_mainPjPKji(
+.param .u64 _Z11kernel_mainPjPKji_param_0,
+.param .u64 _Z11kernel_mainPjPKji_param_1,
+.param .u32 _Z11kernel_mainPjPKji_param_2
+)
+{
+.reg .pred %p<13>;
+.reg .b32 %r<73>;
+.reg .b64 %rd<36>;
+
+
+ld.param.u64 %rd18, [_Z11kernel_mainPjPKji_param_0];
+ld.param.u64 %rd16, [_Z11kernel_mainPjPKji_param_1];
+ld.param.u32 %r12, [_Z11kernel_mainPjPKji_param_2];
+cvta.to.global.u64 %rd1, %rd18;
+mov.u32 %r1, %ntid.x;
+mov.u32 %r13, %ctaid.x;
+mov.u32 %r2, %tid.x;
+mad.lo.s32 %r3, %r13, %r1, %r2;
+setp.eq.s32 %p1, %r12, 0;
+mov.u64 %rd30, 0;
+@%p1 bra $L__BB0_2;
+
+rem.u32 %r14, %r3, %r12;
+cvt.u64.u32 %rd30, %r14;
+
+$L__BB0_2:
+cvta.to.global.u64 %rd19, %rd16;
+shl.b64 %rd20, %rd30, 2;
+add.s64 %rd21, %rd19, %rd20;
+ld.global.u32 %r4, [%rd21];
+ld.global.u64 %rd4, [arr_0];
+mov.u32 %r5, %nctaid.x;
+setp.eq.s32 %p2, %r5, %r12;
+mov.u64 %rd31, %rd4;
+@%p2 bra $L__BB0_4;
+
+mul.hi.u64 %rd22, %rd4, 3353953467947191203;
+shr.u64 %rd23, %rd22, 1;
+mul.lo.s64 %rd24, %rd23, 11;
+sub.s64 %rd25, %rd4, %rd24;
+shl.b64 %rd26, %rd25, 3;
+mov.u64 %rd27, arr_0;
+add.s64 %rd28, %rd27, %rd26;
+ld.global.u64 %rd31, [%rd28];
+
+$L__BB0_4:
+xor.b64 %rd7, %rd4, 154184958;
+setp.gt.u32 %p3, %r5, %r1;
+mov.u64 %rd35, %rd7;
+@%p3 bra $L__BB0_6;
+
+mov.u32 %r16, 2;
+mov.u32 %r17, 1534673980;
+mov.u32 %r18, 8;
+
+	shf.r.wrap.b32 %r15, %r16, %r17, %r18;
+
+	cvt.u64.u32 %rd35, %r15;
+
+$L__BB0_6:
+and.b32 %r19, %r1, 31;
+mov.u32 %r20, 31;
+shl.b32 %r21, %r3, %r19;
+shr.u32 %r22, %r20, %r19;
+xor.b32 %r6, %r21, %r22;
+cvt.u32.u64 %r23, %rd4;
+mov.u32 %r24, 6;
+mov.u32 %r25, 0;
+prmt.b32 %r26, %r23, %r25, %r24;
+and.b32 %r27, %r26, 255;
+setp.ne.s32 %p4, %r27, 0;
+selp.u32 %r28, 1, 0, %p4;
+brev.b64 %rd29, %rd31;
+cvt.u32.u64 %r29, %rd29;
+xor.b32 %r30, %r29, 19618;
+cvt.s32.s16 %r31, %r30;
+and.b32 %r32, %r4, 65534;
+cvt.u32.u64 %r33, %rd7;
+xor.b32 %r34, %r32, %r33;
+xor.b32 %r35, %r34, %r28;
+xor.b32 %r36, %r35, %r31;
+xor.b32 %r7, %r36, -1675466288;
+mov.u32 %r37, %tid.y;
+setp.eq.s32 %p5, %r2, -1;
+selp.b32 %r8, %r37, %r3, %p5;
+xor.b32 %r38, %r3, -559038737;
+mul.lo.s32 %r39, %r38, -1640531527;
+shr.u32 %r40, %r38, 16;
+xor.b32 %r41, %r40, %r38;
+xor.b32 %r9, %r41, %r39;
+setp.ge.u32 %p6, %r3, %r12;
+@%p6 bra $L__BB0_10;
+
+setp.ne.s32 %p7, %r12, 255;
+mov.u64 %rd33, %rd35;
+@%p7 bra $L__BB0_9;
+
+mov.u32 %r43, 0;
+mov.u32 %r45, 7;
+
+	shf.l.clamp.b32 %r42, %r43, %r8, %r45;
+
+	cvt.u64.u32 %rd33, %r42;
+
+$L__BB0_9:
+cvt.u32.u64 %r46, %rd33;
+add.s32 %r47, %r6, %r46;
+atom.global.min.u32 %r48, [%rd1], %r47;
+
+$L__BB0_10:
+@%p6 bra $L__BB0_14;
+
+setp.ne.s32 %p9, %r12, 255;
+mov.u64 %rd34, %rd35;
+@%p9 bra $L__BB0_13;
+
+mov.u32 %r50, 0;
+mov.u32 %r52, 7;
+
+	shf.l.clamp.b32 %r49, %r50, %r8, %r52;
+
+	cvt.u64.u32 %rd34, %r49;
+
+$L__BB0_13:
+cvt.u32.u64 %r53, %rd34;
+add.s32 %r54, %r6, %r53;
+atom.global.min.u32 %r55, [%rd1], %r54;
+
+$L__BB0_14:
+xor.b32 %r10, %r4, %r9;
+@%p6 bra $L__BB0_18;
+
+setp.ne.s32 %p11, %r12, 255;
+@%p11 bra $L__BB0_17;
+
+mov.u32 %r57, 0;
+mov.u32 %r59, 7;
+
+	shf.l.clamp.b32 %r56, %r57, %r8, %r59;
+
+	cvt.u64.u32 %rd35, %r56;
+
+$L__BB0_17:
+cvt.u32.u64 %r60, %rd35;
+add.s32 %r61, %r6, %r60;
+atom.global.min.u32 %r62, [%rd1], %r61;
+
+$L__BB0_18:
+shr.u32 %r63, %r9, 16;
+xor.b32 %r64, %r63, %r9;
+mul.lo.s32 %r65, %r9, -1640531527;
+xor.b32 %r66, %r64, %r65;
+xor.b32 %r67, %r10, %r66;
+xor.b32 %r68, %r7, %r67;
+mul.lo.s32 %r69, %r66, -1640531527;
+shr.u32 %r70, %r66, 16;
+xor.b32 %r71, %r70, %r66;
+xor.b32 %r72, %r71, %r69;
+xor.b32 %r11, %r68, %r72;
+setp.ne.s32 %p12, %r3, 0;
+@%p12 bra $L__BB0_20;
+
+st.global.u32 [%rd1], %r11;
+
+$L__BB0_20:
+ret;
+
+}
+

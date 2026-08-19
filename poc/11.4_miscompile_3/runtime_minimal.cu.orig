@@ -1,0 +1,233 @@
+#include <cuda_runtime.h>
+#include <stdio.h>
+#define GPU_SDIV(a, b) ((b) != 0 && !((__typeof__(b))(-1) < (__typeof__(b))(0) && (b) == (__typeof__(b))(-1) && (a) == (__typeof__(a))(1ULL << (sizeof(a) * 8 - 1))) ? (a) / (b) : 0)
+#define GPU_SMOD(a, b) ((b) != 0 && !((__typeof__(b))(-1) < (__typeof__(b))(0) && (b) == (__typeof__(b))(-1) && (a) == (__typeof__(a))(1ULL << (sizeof(a) * 8 - 1))) ? (a) % (b) : 0)
+#define GPU_SSHL(a, b) ((b) >= 0 && (b) < (long long)(sizeof(a) * 8) ? ((unsigned long long)(a) << (b)) : 0ULL)
+#define GPU_SSHR(a, b) ((b) >= 0 && (b) < (long long)(sizeof(a) * 8) ? (a) >> (b) : 0)
+#define GPU_SADD(a, b) ((__typeof__((a) + (b)))((unsigned long long)(a) + (unsigned long long)(b)))
+#define GPU_SSUB(a, b) ((__typeof__((a) + (b)))((unsigned long long)(a) - (unsigned long long)(b)))
+#define GPU_FAKE_DIVERGE(idx, off) ((idx) - (off))
+#define GPU_GROUP_DIVERGE(idx, val) ((idx)*0 + (val))
+#define GPU_CUDA_CHECK(call)                                                                                                                                                                           \
+  do {                                                                                                                                                                                                 \
+    cudaError_t _gpu_err = (call);                                                                                                                                                                     \
+    if (_gpu_err != cudaSuccess) {                                                                                                                                                                     \
+      fprintf(stderr, "CUDA_ERROR %s:%d: %s: %s\n", __FILE__, __LINE__, #call, cudaGetErrorString(_gpu_err));                                                                                          \
+      return 2;                                                                                                                                                                                        \
+    }                                                                                                                                                                                                  \
+  } while (0)
+extern "C" {
+__device__ unsigned long long arr_0[11];
+__device__ unsigned char arr_1[7];
+__device__ signed char arr_2[7];
+__device__ unsigned long long arr_3[16][16];
+__device__ signed char arr_4[13];
+__device__ unsigned char arr_5[11][11][11];
+}
+__forceinline__ __device__ unsigned int helper_0(unsigned int p0, unsigned int p1) {
+  for (int i_0 = 0; i_0 < ((((int)(GPU_SDIV((p0 * p0), GPU_SSHR(blockIdx.y, p1)))) & 3) + 1); i_0 += 1) {
+    for (int i_1 = 0; i_1 < 16; i_1 += 1) {
+      {
+        int dw_0 = 0;
+        do {
+          __threadfence();
+          dw_0++;
+        } while ((dw_0 < 2));
+      }
+      {
+        int w_0 = 0;
+        while ((w_0 < 2)) {
+          p0 = GPU_SSHL((blockIdx.y - blockIdx.x), ((unsigned int)(((unsigned short)49152u))));
+          w_0++;
+        }
+      }
+    }
+    for (int i_2 = 0; i_2 < ((((int)(((p1 & ((unsigned long long)(threadIdx.x)))))) & 7) + 1); i_2 += 1) {
+      if ((blockDim.x != p1)) {
+        if ((threadIdx.x >= blockDim.x)) {
+          unsigned int _dead_0 = 3735936685u;
+          _dead_0 = p1;
+        }
+        --p0;
+      } else {
+        p0 = (p0 ^ (__brev((((p1 | p1) + (blockDim.x - p0))))));
+        p1 = (p0 - ((signed char)((GPU_SSHL(p1, (blockDim.y & 31u)) ^ GPU_SSHR(blockDim.x, (blockDim.y & 31u))))));
+      }
+    }
+  }
+}
+extern "C" __global__ __launch_bounds__(1024, 2) void kernel_main(unsigned int *__restrict__ output, const unsigned int *__restrict__ input, int n, unsigned short var_0, unsigned char var_1,
+                                                                  unsigned int var_2) {
+  unsigned int tid = (threadIdx.x + (blockIdx.x * blockDim.x));
+  short ov_0 = ((short)(input[GPU_SMOD((tid + 0u), ((unsigned int)(n)))]));
+  bool ov_1 = ((bool)(input[GPU_SMOD((tid + 1u), ((unsigned int)(n)))]));
+  unsigned short ov_2 = ((unsigned short)(input[GPU_SMOD((tid + 2u), ((unsigned int)(n)))]));
+  bool ov_3 = ((bool)(input[GPU_SMOD((tid + 3u), ((unsigned int)(n)))]));
+  signed char ov_4 = ((signed char)(input[GPU_SMOD((tid + 4u), ((unsigned int)(n)))]));
+  long long ov_5 = ((long long)(input[GPU_SMOD((tid + 5u), ((unsigned int)(n)))]));
+  unsigned long long ov_6 = ((unsigned long long)(input[GPU_SMOD((tid + 6u), ((unsigned int)(n)))]));
+  unsigned long long ov_7 = ((unsigned long long)(input[GPU_SMOD((tid + 7u), ((unsigned int)(n)))]));
+  short v_0 = (((((((signed char)-74) < ((signed char)-127)) ? var_2 : 4611686018427387903ll)) >= ((unsigned char)((GPU_SSHL(1431655765u, (var_2 & 31u)) ^ GPU_SSHR(var_2, (var_2 & 31u))))))
+                   ? ((short)(((int)(((__ldg((&(input[GPU_SMOD(tid, ((unsigned int)(n)))])))))))))
+                   : (((((bool)(threadIdx.y)) < true) ? ((long long)((((unsigned int)(__ffs(((unsigned int)(var_2))))) ^ ((unsigned int)(__popc(((unsigned int)(var_2))))))))
+                                                      : ((unsigned short)(__usad(((unsigned int)(threadIdx.x)), ((unsigned int)(gridDim.x)), ((unsigned int)(31u))))))));
+  bool v_1 = ((bool)((
+      (unsigned char)(__byte_perm(((unsigned int)(arr_3[GPU_SMOD(317385364u, 16u)][GPU_SMOD(7u, 16u)])), ((unsigned int)(__brevll(((unsigned long long)(((unsigned long long)(gridDim.x))))))), 6u)))));
+  unsigned char v_2 = (((((unsigned int)(arr_3[GPU_SMOD(42u, 16u)][GPU_SMOD(blockIdx.x, 16u)])) == ((255u | 1ll)))
+                            ? (((((long long)(gridDim.y)) >= -7239789203040921640ll) ? ((((signed char)51) >= ((signed char)28)) ? var_2 : 48879u)
+                                                                                     : (((((unsigned short)(blockIdx.x)) != var_0) ? ((short)-15326) : -8209374634527953321ll))))
+                            : ((unsigned long long)(GPU_GROUP_DIVERGE(blockIdx.x, (((((bool)(blockIdx.x)) >= ((bool)(threadIdx.x))) ? 4986325391324574397ull : ((signed char)-41))))))));
+  unsigned long long v_3 = ((unsigned long long)((
+      154184958u ^ ((unsigned int)(arr_5[GPU_SMOD((GPU_SSHL(gridDim.x, (var_2 & 31u)) ^ GPU_SSHR(3809002500u, (var_2 & 31u))), 11u)][GPU_SMOD(
+                       ((unsigned int)(__clz(((unsigned int)(gridDim.x))))), 11u)][GPU_SMOD(__usad(((unsigned int)(tid)), ((unsigned int)(var_2)), ((unsigned int)(13u))), 11u)])))));
+  unsigned char v_5 = ((unsigned char)(GPU_GROUP_DIVERGE(blockIdx.x, ((unsigned int)(arr_0[GPU_SMOD(((unsigned int)(__clz(((int)(-2))))), 11u)])))));
+  signed char v_7 = ((signed char)((
+      GPU_SSHL(GPU_GROUP_DIVERGE(blockIdx.x, (tid + GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x))),
+               (((v_3 >= ((unsigned long long)(gridDim.y))) ? ((unsigned int)(arr_5[GPU_SMOD(tid, 11u)][GPU_SMOD(blockIdx.x, 11u)][GPU_SMOD(tid, 11u)])) : ((unsigned int)(arr_2[GPU_SMOD(tid, 7u)]))) &
+                31u)) ^
+      GPU_SSHR(((((long long)(gridDim.x)) < -8104396014255651177ll) ? ((unsigned int)(v_1)) : (tid - n)),
+               (((v_3 >= ((unsigned long long)(gridDim.y))) ? ((unsigned int)(arr_5[GPU_SMOD(tid, 11u)][GPU_SMOD(blockIdx.x, 11u)][GPU_SMOD(tid, 11u)])) : ((unsigned int)(arr_2[GPU_SMOD(tid, 7u)]))) &
+                31u)))));
+  long long v_8 = ((long long)(__funnelshift_lc(
+      ((unsigned int)(((unsigned int)(arr_2[GPU_SMOD(((unsigned int)(arr_4[GPU_SMOD(var_2, 13u)])), 7u)])))),
+      ((unsigned int)(((v_1 != true) ? ((unsigned int)(__clz(((unsigned int)(blockIdx.y))))) : ((((signed char)-1) == ((signed char)(threadIdx.x))) ? threadIdx.y : tid)))), ((unsigned int)(7u)))));
+  signed char v_9 = ((((long long)(__sad(((int)(n)), ((int)(n)), ((unsigned int)(31u))))) <= ((long long)((GPU_SSHL(3484416270u, (threadIdx.y & 31u)) ^ GPU_SSHR(48879u, (threadIdx.y & 31u))))))
+                         ? (((v_7 > v_7) ? ((short)(arr_4[GPU_SMOD(blockIdx.x, 13u)])) : ((signed char)((GPU_SSHL(blockDim.x, (blockDim.x & 31u)) ^ GPU_SSHR(tid, (blockDim.x & 31u)))))))
+                         : arr_4[GPU_SMOD(((unsigned int)(((int)(((unsigned short)(blockIdx.x)))))), 13u)]);
+  bool v_10 = ((((((unsigned char)(threadIdx.y)) - 563357455u)) != ((255u < var_2) ? v_5 : v_5)) &&
+               (((n > ((int)(gridDim.y))) ? ((signed char)-61) : ((signed char)-37)) >= ((v_3 != v_3) ? ((signed char)-128) : ((signed char)-1))));
+  bool v_11 = ((((short)(((unsigned int)(__clzll(((unsigned long long)(18446744073709551615ull))))))) <= ((short)((GPU_SSHL(tid, (var_2 & 31u)) ^ GPU_SSHR(gridDim.y, (var_2 & 31u))))))
+                   ? (((long long)(((int)((3849652021u))))) >= (n))
+                   : (((n == n) ? ((int)((((int)(((unsigned char)(blockDim.x))))))) : ((((short)30839) < ((short)-26465)) ? ((unsigned long long)(blockDim.x)) : 3566687490007631855ull))));
+  unsigned short v_12 = ((unsigned short)(arr_0[GPU_SMOD(((unsigned int)(arr_4[GPU_SMOD(__byte_perm(gridDim.y, tid, 4u), 13u)])), 11u)]));
+  signed char v_13 =
+      (((arr_0[GPU_SMOD(tid, 11u)] >= ((unsigned long long)(__byte_perm(threadIdx.x, 1858591342u, 6u))))
+            ? (((blockDim.x != 3u) ? ((v_3 >= v_3) ? var_2 : threadIdx.y) : (((v_0 < v_0) ? threadIdx.x : var_0))))
+            : ((long long)(((unsigned int)(__clz(
+                  ((unsigned int)((((unsigned int)(__brevll(((unsigned long long)(15390976829246048046ull))))) ^ ((unsigned int)(__popcll(((unsigned long long)(4986325391324574397ull)))))))))))))));
+  signed char v_14 = (((((bool)((var_2 + GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x)))) <= (v_9))
+                           ? (((((signed char)(blockDim.x)) == ((signed char)42)) ? ((short)(arr_1[GPU_SMOD(var_2, 7u)])) : (v_0)))
+                           : ((short)((GPU_SSHL(((183721949 != -379850081) ? ((signed char)57) : var_2), ((GPU_SSHL(var_2, (gridDim.x & 31u)) ^ GPU_SSHR(var_2, (gridDim.x & 31u))) & 31u)) ^
+                                       GPU_SSHR((~(3125104205u)), ((GPU_SSHL(var_2, (gridDim.x & 31u)) ^ GPU_SSHR(var_2, (gridDim.x & 31u))) & 31u)))))));
+  short v_16 = (((((3621658061193499938ll != ((long long)(blockIdx.y))) ? n : threadIdx.y)) >= ((unsigned long long)((37u ^ 4278255360u))))
+                    ? ((short)((GPU_SSHL(__funnelshift_r(((unsigned int)(255u)), ((unsigned int)(tid)), ((unsigned int)(23u))),
+                                         ((((-7293850184320197ll > ((long long)(blockIdx.x))) ? n : ((unsigned short)32752u))) & 31u)) ^
+                                GPU_SSHR((1u + GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x)), ((((-7293850184320197ll > ((long long)(blockIdx.x))) ? n : ((unsigned short)32752u))) & 31u)))))
+                    : ((short)(threadIdx.x)));
+  unsigned short v_17 = ((unsigned short)(GPU_GROUP_DIVERGE(blockIdx.x, ((unsigned int)((((unsigned char)(__umul24(((unsigned int)(4217258266u)), ((unsigned int)(tid)))))))))));
+  unsigned long long v_18 = ((unsigned long long)(arr_2[GPU_SMOD(2878739703u, 7u)]));
+  unsigned short v_19 = ((unsigned short)((~(3171714197u))));
+  unsigned int v_20 = (((unsigned int)(__ffs(
+                           ((unsigned int)(((GPU_SSHL(193077946u, (blockDim.x & 31u)) ^ GPU_SSHR(tid, (blockDim.x & 31u))) & ((signed char)(((unsigned int)(__brev(((unsigned int)(var_2))))))))))))) ^
+                       ((unsigned int)(__brev(((unsigned int)(var_2))))));
+  bool v_21 = (((((long long)(threadIdx.x)) ^ ((short)-29602)) < (v_8 | ((signed char)0))) || (((false - blockIdx.y)) < ((bool)(((unsigned int)((blockDim.x)))))));
+  short v_23 = ((((short)(__umulhi(((unsigned int)(((((unsigned char)13u) >= v_2) ? var_2 : 255u))), ((unsigned int)(1012190822u))))) &
+                 ((unsigned char)(((unsigned int)((((unsigned int)(arr_5[GPU_SMOD(blockDim.x, 11u)][GPU_SMOD(42u, 11u)][GPU_SMOD(v_20, 11u)])))))))));
+  unsigned int v_24 =
+      ((unsigned int)(__ffs(((unsigned int)(((-801549771 < ((int)(blockDim.x))) ? (((blockDim.y == 0u) ? v_8 : tid)) : ((unsigned int)(__ffsll(((long long)(3896753628823144352ll)))))))))));
+  unsigned int v_25 = tid;
+  bool v_26 = (((signed char)(((short)(((long long)(__byte_perm(((unsigned int)(v_20)), ((unsigned int)(blockIdx.x)), ((unsigned int)(9u))))))))) >=
+               (((GPU_SADD(((signed char)47), ((unsigned char)102u))) | ((v_17 < ((unsigned short)33910u)) ? ((short)42) : v_16))));
+  short v_27 = ((((signed char)(((unsigned int)(__popcll(((unsigned long long)(((unsigned long long)(gridDim.x))))))))) <= ((((short)-25380) > ((short)4584)) ? v_14 : ((signed char)(gridDim.x))))
+                    ? (((v_3 > ((unsigned long long)(gridDim.y))) ? (((v_8 <= v_8) ? ((unsigned long long)(blockIdx.y)) : v_17)) : ((0u <= v_24) ? v_25 : 42u)))
+                    : ((threadIdx.x != tid) ? ((short)(GPU_GROUP_DIVERGE(blockIdx.x, 3447877281u)))
+                                            : ((short)(__funnelshift_lc(((unsigned int)(blockIdx.x)), ((unsigned int)(var_2)), ((unsigned int)(22u)))))));
+  unsigned short v_28 = ((unsigned short)((13u ^ ((unsigned int)(arr_0[GPU_SMOD(((unsigned int)(arr_1[GPU_SMOD(var_2, 7u)])), 11u)])))));
+  unsigned long long v_29 = ((unsigned long long)(__funnelshift_lc(
+      ((unsigned int)((((v_8 == 4114492070980138415ll) ? ((var_0 != v_28) ? ((long long)(threadIdx.x)) : ((long long)(blockIdx.x))) : ((short)((~(3569775412u)))))))),
+      ((unsigned int)(((unsigned int)((((GPU_SSHL(42u, (2897074755u & 31u)) ^ GPU_SSHR(var_2, (2897074755u & 31u))))))))), ((unsigned int)(10u)))));
+  unsigned int v_30 = ((unsigned int)(arr_4[GPU_SMOD(((v_1 != v_11) ? ((false >= v_10) ? threadIdx.x : v_25) : ((unsigned int)(((long long)(((unsigned char)(2865392319u))))))), 13u)]));
+  unsigned int v_31 = (((((int)(__brevll(((unsigned long long)(v_3))))) < ((int)(arr_5[GPU_SMOD(2863311530u, 11u)][GPU_SMOD(v_25, 11u)][GPU_SMOD(v_25, 11u)])))
+                            ? ((long long)(((unsigned int)(__brevll(((unsigned long long)(((((unsigned short)59945u) >= v_28) ? v_29 : 42ull))))))))
+                            : ((int)((4294967295u ^ 1431655765u)))));
+  unsigned short v_33 = ((((unsigned short)((((unsigned int)(__popcll(((unsigned long long)(v_29))))) ^ ((unsigned int)(__popc(((unsigned int)(48879u)))))))) ==
+                          ((unsigned short)(GPU_GROUP_DIVERGE(blockIdx.x, blockDim.x))))
+                             ? ((unsigned short)((((unsigned int)(__clz(((int)(n))))) + GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x))))
+                             : ((unsigned short)((GPU_SSHL(((unsigned int)(((long long)(((signed char)(((int)(2650170176u)))))))),
+                                                           ((((((unsigned short)24751u) <= ((unsigned short)38016u)) ? ((unsigned short)(blockIdx.x)) : v_13)) & 31u)) ^
+                                                  GPU_SSHR((GPU_SSUB(3902821952u, -8430792008226841375ll)),
+                                                           ((((((unsigned short)24751u) <= ((unsigned short)38016u)) ? ((unsigned short)(blockIdx.x)) : v_13)) & 31u))))));
+  unsigned long long v_35 = arr_0[GPU_SMOD(((n == ((int)(gridDim.x))) ? (gridDim.y & v_17) : (((((unsigned short)1024u) < ((unsigned short)(blockIdx.x))) ? 7271927702470053681ull : v_23))), 11u)];
+  unsigned int v_36 = __brev(((unsigned int)((v_26))));
+  unsigned int v_37 = (((unsigned int)(((short)(((((unsigned int)(__brevll(((unsigned long long)(4986325391324574397ull))))) ^ ((unsigned int)(__brevll(((unsigned long long)(v_35))))))))))) +
+                       GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x));
+  long long v_38 = ((
+      long long)(GPU_GROUP_DIVERGE(blockIdx.x, ((((unsigned short)(gridDim.x)) <= ((unsigned short)(blockDim.x))) ? __funnelshift_r(((unsigned int)(2u)), ((unsigned int)(v_20)), ((unsigned int)(8u)))
+                                                                                                                  : (((((int)(threadIdx.x)) <= n) ? v_3 : ((short)(blockDim.x))))))));
+  bool v_39 = ((((signed char)(((unsigned int)(__popc(((unsigned int)(v_31))))))) >= ((signed char)((blockDim.x + GPU_FAKE_DIVERGE(threadIdx.x, threadIdx.x))))) ||
+               (((((short)(gridDim.x)) == v_23) || (v_1 <= v_10)) >= (true >= v_21)));
+  unsigned short v_44 = ((unsigned short)((2u ^ 4278255360u)));
+  unsigned int v_46 =
+      ((unsigned int)(__brevll(((unsigned long long)(((unsigned long long)(__umulhi(((unsigned int)(((unsigned int)(arr_2[GPU_SMOD(1u, 7u)])))), ((unsigned int)((v_31 ^ v_17)))))))))));
+  bool v_47 = v_39;
+  unsigned int dsw_0 = (tid ^ 3735928559u);
+  unsigned int dsw_1 = (tid ^ 3735928559u);
+  unsigned int su_0 = input[GPU_SMOD(tid, ((unsigned int)(n)))];
+  unsigned int _fv = input[GPU_SMOD(tid, ((unsigned int)(n)))];
+  for (int _rep = 0; _rep < 3; _rep += 1) {
+    switch ((tid & 3u)) {
+    case 0: {
+      dsw_0 = (dsw_0 ^ ((dsw_0 * 2654435769u) ^ GPU_SSHR(dsw_0, 16u)));
+      break;
+    }
+    case 1: {
+      dsw_0 = (dsw_0 ^ ((dsw_0 ^ 2246822507u) * 3266489909u));
+      break;
+    }
+    case 2: {
+      dsw_0 = (dsw_0 ^ (dsw_0 + (GPU_SSHL(dsw_0, 13u) ^ GPU_SSHR(dsw_0, 7u))));
+      break;
+    }
+    case 3: {
+      dsw_0 = (dsw_0 ^ ((GPU_SSHL(dsw_0, 7u) | GPU_SSHR(dsw_0, 25u)) ^ 668265263u));
+      break;
+    }
+    default: {
+      dsw_0 = (dsw_0 + 1367130551u);
+      break;
+    }
+    }
+    bool v_50 = (((int)((4294967295u ^ ((unsigned int)(arr_5[GPU_SMOD(407263250u, 11u)][GPU_SMOD(v_31, 11u)][GPU_SMOD(1u, 11u)]))))) <
+                 ((int)((((short)((((unsigned int)(__clz(((unsigned int)(2654435769u))))) ^ ((unsigned int)(__brev(((unsigned int)(3u))))))))))));
+    if ((tid < ((unsigned int)(n)))) {
+      atomicMin(&(output[GPU_SMOD(tid, ((unsigned int)(n)))]), (42u ^ __funnelshift_rc(((unsigned int)(7u)), ((unsigned int)(3825854101u)), ((unsigned int)(10u)))));
+    }
+    if ((tid < ((unsigned int)(n)))) {
+      atomicMin(&(output[GPU_SMOD(tid, ((unsigned int)(n)))]), (GPU_SADD((GPU_SSHL(v_25, (blockDim.x & 31u)) ^ GPU_SSHR(31u, (blockDim.x & 31u))), ((n == 255) ? v_8 : v_38))));
+    }
+    extern __shared__ unsigned int _dsmem_0[];
+    _fv = (_fv ^ ((unsigned int)(var_0)));
+    _fv = (_fv ^ ((unsigned int)(var_2)));
+    _fv = (_fv ^ ((unsigned int)(v_1)));
+    _fv = (_fv ^ ((unsigned int)(v_3)));
+    _fv = (_fv ^ ((unsigned int)(v_37)));
+    _fv = (_fv ^ ((unsigned int)(v_39)));
+    _fv = (_fv ^ ((unsigned int)(v_47)));
+    _fv = (_fv ^ ((unsigned int)(dsw_0)));
+    _fv = (_fv ^ ((unsigned int)(ov_2)));
+    _fv = (_fv ^ ((unsigned int)(ov_3)));
+    ov_7 = ((unsigned long long)((((unsigned int)(ov_7)) ^ ((((unsigned int)(_rep)) * 2246822507u) + _fv))));
+  }
+  if (tid == 0u) {
+    output[0] = _fv;
+  }
+}
+int main(void) {
+  const int n = 1;
+  const int buf_size = n;
+  const int in_size = buf_size * 32;
+  unsigned int *h_input = (unsigned int *)malloc(in_size * sizeof(unsigned int));
+  unsigned int *h_output = (unsigned int *)malloc(buf_size * sizeof(unsigned int));
+  unsigned int *d_input = NULL, *d_output = NULL;
+  GPU_CUDA_CHECK(cudaMalloc((void **)&d_input, in_size * sizeof(unsigned int)));
+  GPU_CUDA_CHECK(cudaMalloc((void **)&d_output, buf_size * sizeof(unsigned int)));
+  GPU_CUDA_CHECK(cudaMemcpy(d_input, h_input, in_size * sizeof(unsigned int), cudaMemcpyHostToDevice));
+  GPU_CUDA_CHECK(cudaMemset(d_output, 0, buf_size * sizeof(unsigned int)));
+  for (int i = 0; i < in_size; i++)
+    h_input[i] = (unsigned int)i * 2654435761u + 12345u;
+  dim3 grid(1);
+  dim3 block(1);
+  kernel_main<<<grid, block, 1024>>>(d_output, d_input, n, ((unsigned short)63242u), ((unsigned char)21u), 2619514586u);
+  GPU_CUDA_CHECK(cudaMemcpy(h_output, d_output, buf_size * sizeof(unsigned int), cudaMemcpyDeviceToHost));
+  printf("checksum=%u\n", h_output[0]);
+}

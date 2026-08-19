@@ -1,0 +1,493 @@
+BUILD cuda-10.1 -Xptxas -O0
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-10.1 -Xptxas -O1
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-10.1 -Xptxas -O2
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-10.1 -Xptxas -O3
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.4 -Xptxas -O0
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.4 -Xptxas -O1
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.4 -Xptxas -O2
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.4 -Xptxas -O3
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.8 -Xptxas -O0
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.8 -Xptxas -O1
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.8 -Xptxas -O2
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+BUILD cuda-11.8 -Xptxas -O3
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(15): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(23): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(24): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(25): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+/export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/runtime_minimal.cu(33): warning #186-D: pointless comparison of unsigned integer with zero
+
+built 12 variants under /export/d3/xzhanglb/Cuda_Stress/poc/10.1-O0_11.4_11.8_hang_0/build
