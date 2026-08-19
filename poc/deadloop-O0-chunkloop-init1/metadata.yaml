@@ -1,0 +1,22 @@
+id: deadloop-O0-chunkloop-init1
+title: ptxas -O0 chunk-loop induction-var init misplacement (variant 1)
+class: deadloop
+trigger_opt: [O0]
+correct_value: null
+buggy_value: non-terminating
+arch_verified: sm_86
+range_sm86:
+  introduced: null
+  last_bad: null
+  fixed_in: null
+  note: not reproducible at sm_86 in 11.1..13.3 (all OK, checksum=0)
+range_sm75:
+  introduced: "10.1"
+  last_bad: "10.1"
+  fixed_in: "11.0"
+  note: "10.1 -Xptxas -O0 times out; 10.1 O1+/11.4/11.8 OK"
+root_cause: "Same family as chunkloop-init0: second inlined helper_0 call has a path into the chunk loop that bypasses R2=-64."
+original_case_id: "10.1_deadloop_1"
+original_source: poc/cuda-10.1_O0_deadloop/generator_ir__5fc52dba44776f66/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

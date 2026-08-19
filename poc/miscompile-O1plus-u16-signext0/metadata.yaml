@@ -1,0 +1,22 @@
+id: miscompile-O1plus-u16-signext0
+title: ptxas drops post-negation 16-bit re-sign-extension before shr.s16
+class: miscompile
+trigger_opt: [O1, O2]
+correct_value: "65407"
+buggy_value: "127"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.2"
+  last_bad: "13.2"
+  fixed_in: "13.3"
+  note: O1/O2 wrong 11.2..13.2; O0 all correct; 13.3 correct. O3 not measured (follows O2 per sm_75 README).
+range_sm75:
+  introduced: "12.5"
+  last_bad: "13.0"
+  fixed_in: "13.3"
+  note: "12.5/13.0 O1/O2 wrong; 13.3 correct"
+root_cause: ptxas omits the second PRMT re-sign-extension after neg.s16, so SHF.R.S32.HI shifts 0x00008000 instead of 0xffff8000.
+original_case_id: "13.0-O0_12.5-O12_miscompile_0"
+original_source: runs/run-20260818-105706-0f72/differentials/generator_ir__e957aeccec983129/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

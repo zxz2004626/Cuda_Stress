@@ -1,0 +1,22 @@
+id: miscompile-O1plus-u16-signext1
+title: ptxas drops post-negation 16-bit re-sign-extension (variant 1)
+class: miscompile
+trigger_opt: [O1, O2]
+correct_value: "4294967168"
+buggy_value: "128"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.2"
+  last_bad: "13.2"
+  fixed_in: "13.3"
+  note: O1/O2 wrong 11.2..13.2; O0 all correct; 13.3 correct. O3 not measured (follows O2 per sm_75 README).
+range_sm75:
+  introduced: "12.5"
+  last_bad: "13.0"
+  fixed_in: "13.3"
+  note: "12.5/13.0 O1/O2 wrong; 13.3 correct"
+root_cause: Same u16 sign-extension bug as signext0, exercised via (short)(signed char)-blockIdx.x at the first sign-bit-set index (128).
+original_case_id: "13.0-O0_12.5-O12_miscompile_1"
+original_source: runs/run-20260819-000123-2433/differentials/generator_ir__37afd2c4c9ac8dd2/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

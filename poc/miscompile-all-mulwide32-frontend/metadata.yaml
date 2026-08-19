@@ -1,0 +1,22 @@
+id: miscompile-all-mulwide32-frontend
+title: front-end (unsigned long long)(int)n<<31 lowered to signed mul.wide.s32
+class: miscompile
+trigger_opt: [O0, O1, O2, O3]
+correct_value: "0"
+buggy_value: "32"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.1"
+  last_bad: "11.5"
+  fixed_in: "11.6"
+  note: "11.1..11.5 output 32 (buggy front-end); 11.6..13.3 output 0 (source-correct). NOTE: source-correct side is the LATER toolchain here."
+range_sm75:
+  introduced: "10.1"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "10.1/11.4 output 32; 11.8 output 0 (source-correct)"
+root_cause: NVVM front-end lowers (unsigned long long)(int)n<<31 to mul.wide.s32 n,INT_MIN (sign-extends to 0xffffffff80000000) instead of cvt.s64.s32+shl.b64.
+original_case_id: "11.8_miscompile_1"
+original_source: poc/cuda-11.8_miscompile/generator_ir__9e93ada826b9f09e/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

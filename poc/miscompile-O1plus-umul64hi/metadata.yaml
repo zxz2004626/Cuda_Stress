@@ -1,0 +1,22 @@
+id: miscompile-O1plus-umul64hi
+title: sub.s64 high-word sign-extension error feeding mul.hi.u64
+class: miscompile
+trigger_opt: [O1, O2, O3]
+correct_value: "0"
+buggy_value: "1027807174"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.1"
+  last_bad: "13.3"
+  fixed_in: null
+  note: O0 correct (=0), O1/O2/O3 wrong (=1027807174) for ALL 11.1..13.3; still unfixed
+range_sm75:
+  introduced: "10.1"
+  last_bad: "11.8"
+  fixed_in: null
+  note: "10.1/11.4/11.8 O1+ all wrong"
+root_cause: ptxas fixes the high word of a sub.s64 0-0 result to -1 (IADD3.X ... -0x1), corrupting the mul.hi.u64 second operand.
+original_case_id: "10.1-Op_11.4-Op_11.8-Op_miscompile_0"
+original_source: poc/O0_vs_O1plus/generator_ir__29d6eb2c57873034/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

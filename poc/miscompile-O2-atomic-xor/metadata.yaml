@@ -1,0 +1,22 @@
+id: miscompile-O2-atomic-xor
+title: ptxas -O2 atomicMin/XOR loop unroll wrong active-register reuse
+class: miscompile
+trigger_opt: [O2, O3]
+correct_value: "2419750549"
+buggy_value: "2419750548"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.1"
+  last_bad: "11.6"
+  fixed_in: "11.7"
+  note: O2 wrong 11.1..11.6, O1 wrong at 11.1 only; 11.7..13.3 correct. O3 not measured at sm_86 (follows O2 per sm_75 README).
+range_sm75:
+  introduced: "11.4"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "11.4 O2/O3 wrong; 10.1/11.8 correct"
+root_cause: ptxas -O2 unrolls the 3-iter loop and reuses the wrong live register across the atomicMin/XOR chain, dropping bit0 in the final LOP3.
+original_case_id: "11.4_miscompile_3"
+original_source: poc/cuda-11.4_miscompile/generator_ir__18a58239ac1844f6/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

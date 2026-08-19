@@ -1,0 +1,22 @@
+id: miscompile-O1-prmt-rz0
+title: ptxas -O1 PRMT target misallocated to RZ, stale predicate reused
+class: miscompile
+trigger_opt: [O1]
+correct_value: "2654448107"
+buggy_value: "2654448106"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.2"
+  last_bad: "11.6"
+  fixed_in: "11.7"
+  note: O1 wrong 11.2..11.6; O0 and 11.1/11.7..13.3 correct
+range_sm75:
+  introduced: "11.4"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "11.4 O1 wrong; 10.1/11.8 correct"
+root_cause: ptxas -O1 writes the __byte_perm result to RZ and drops the and+setp.ne predicate recompute, so SEL reuses a stale n==0 guard predicate.
+original_case_id: "11.4_miscompile_1"
+original_source: poc/cuda-11.4_miscompile/generator_ir__7c080bf20e32469b/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

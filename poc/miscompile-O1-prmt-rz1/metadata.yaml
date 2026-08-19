@@ -1,0 +1,22 @@
+id: miscompile-O1-prmt-rz1
+title: ptxas -O1 PRMT->RZ predicate reuse (variant 1)
+class: miscompile
+trigger_opt: [O1, O2]
+correct_value: "197"
+buggy_value: "229"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.1"
+  last_bad: "11.6"
+  fixed_in: "11.7"
+  note: O1/O2 wrong 11.1..11.6; O0 and 11.7..13.3 correct
+range_sm75:
+  introduced: "11.4"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "11.4 O1 wrong only; 10.1/11.8 correct"
+root_cause: "Same PRMT->RZ family: __byte_perm(...)!=0 ? 49:0 reuses the stale 0<threadIdx.x predicate P0."
+original_case_id: "11.4_miscompile_2"
+original_source: poc/cuda-11.4_miscompile/generator_ir__9f23fc3cb34e3ff8/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

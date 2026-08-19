@@ -1,0 +1,22 @@
+id: miscompile-O1plus-div-prenot
+title: ptxas -O1 64-bit division narrowing guard uses pre-not high word
+class: miscompile
+trigger_opt: [O1, O2, O3]
+correct_value: "65520"
+buggy_value: "3"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.6"
+  last_bad: "12.1"
+  fixed_in: "12.2"
+  note: O1 wrong 11.6..12.1; O0 and 11.1..11.5/12.2..13.3 correct
+range_sm75:
+  introduced: "11.8"
+  last_bad: "11.8"
+  fixed_in: "12.0"
+  note: "11.8 O1/O2/O3 wrong; 10.1/11.4 correct"
+root_cause: ptxas -O1 tests high32(x)!=0 instead of high32(~x)!=0 for the div.u64 vs div.u32 narrowing guard, so ~x with non-zero high word takes div.u32.
+original_case_id: "11.8_miscompile_3"
+original_source: poc/cuda-11.8_miscompile/generator_ir__38c3f9cb2f485ed7/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

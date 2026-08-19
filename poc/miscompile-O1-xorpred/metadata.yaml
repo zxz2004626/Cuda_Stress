@@ -1,0 +1,22 @@
+id: miscompile-O1-xorpred
+title: ptxas XOR-reduction lowest-bit predicate loss
+class: miscompile
+trigger_opt: [O1]
+correct_value: "1"
+buggy_value: "0"
+arch_verified: sm_86
+range_sm86:
+  introduced: null
+  last_bad: null
+  fixed_in: null
+  note: not reproducible at sm_86 in 11.1..13.3 (all OK, checksum=1)
+range_sm75:
+  introduced: "10.1"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "10.1 O1 wrong; 11.4 O2/O3 wrong; 11.8 all OK"
+root_cause: ptxas drops/inverts a lowest-bit predicate while reordering the mixed bool/uint/ull XOR reduction _fv = ... ^ v_2 ^ v_5 ^ v_45.
+original_case_id: "10.1-O1_11.4-O2_miscompile_0"
+original_source: poc/mixed_cross_toolchain/generator_ir__ef89b4ca3680e9a2/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

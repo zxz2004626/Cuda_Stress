@@ -1,0 +1,22 @@
+id: miscompile-O1-ffsll
+title: ptxas -O1 negative-constant 64-bit multiply high-half sign correction
+class: miscompile
+trigger_opt: [O1]
+correct_value: "5850102576"
+buggy_value: "5850102547"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.7"
+  last_bad: "12.1"
+  fixed_in: "12.2"
+  note: O1 wrong 11.7..12.1; O0/O2/O3 and 11.1..11.6/12.2..13.3 correct
+range_sm75:
+  introduced: "11.8"
+  last_bad: "11.8"
+  fixed_in: "12.0"
+  note: "11.8 O1 wrong only; 10.1/11.4 correct"
+root_cause: ptxas -O1 uniform-register path uses +gridDim.x instead of -gridDim.x for the high-half correction of x & -x in __ffsll.
+original_case_id: "11.8_miscompile_0"
+original_source: poc/cuda-11.8_miscompile/generator_ir__1df8dd7d23ccc883/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

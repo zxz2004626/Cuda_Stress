@@ -1,0 +1,22 @@
+id: miscompile-all-mulwide32
+title: unsigned 64-bit shift wrongly lowered to signed mul.wide.s32
+class: miscompile
+trigger_opt: [O0, O1, O2, O3]
+correct_value: "1073741824"
+buggy_value: "3221225472"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.2"
+  last_bad: "11.5"
+  fixed_in: "11.6"
+  note: "11.2..11.5 all-opt wrong; 11.1 and 11.6..13.3 correct"
+range_sm75:
+  introduced: "11.4"
+  last_bad: "11.4"
+  fixed_in: "11.8"
+  note: "11.4 all-opt wrong; 10.1/11.8 correct"
+root_cause: (unsigned long long)(signed int)<<31 lowered to mul.wide.s32 var,-2147483648 (sign-extends) instead of cvt.s64.s32 + shl.b64.
+original_case_id: "11.4_miscompile_0"
+original_source: poc/cuda-11.4_miscompile/generator_ir__6aea4c8d5caa03cf/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

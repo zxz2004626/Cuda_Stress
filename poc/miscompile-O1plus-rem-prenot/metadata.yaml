@@ -1,0 +1,22 @@
+id: miscompile-O1plus-rem-prenot
+title: ptxas -O1 64-bit rem zero-divisor guard folds on pre-not value
+class: miscompile
+trigger_opt: [O1, O2, O3]
+correct_value: "1"
+buggy_value: "0"
+arch_verified: sm_86
+range_sm86:
+  introduced: "11.6"
+  last_bad: "12.1"
+  fixed_in: "12.2"
+  note: O1 wrong 11.6..12.1; O0 and 11.1..11.5/12.2..13.3 correct
+range_sm75:
+  introduced: "11.8"
+  last_bad: "11.8"
+  fixed_in: "12.0"
+  note: "11.8 O1/O2/O3 wrong; 10.1/11.4 correct"
+root_cause: ptxas -O1 folds the and+setp.eq zero-divisor guard of rem.s32 using the pre-not low-32 bits, skipping v_36 = 1 % 255.
+original_case_id: "11.8_miscompile_2"
+original_source: poc/cuda-11.8_miscompile/generator_ir__35d576a5d6f55918/test.cu
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"

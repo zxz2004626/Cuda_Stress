@@ -1,0 +1,22 @@
+id: deadloop-O0-chunkloop-init0
+title: ptxas -O0 chunk-loop induction-var init misplacement (variant 0)
+class: deadloop
+trigger_opt: [O0]
+correct_value: null
+buggy_value: non-terminating
+arch_verified: sm_86
+range_sm86:
+  introduced: null
+  last_bad: null
+  fixed_in: null
+  note: not reproducible at sm_86 in 11.1..13.3 (all OK, checksum=5510415734763028640)
+range_sm75:
+  introduced: "10.1"
+  last_bad: "10.1"
+  fixed_in: "11.0"
+  note: "10.1 -Xptxas -O0 times out; 10.1 O1+/11.4/11.8 OK"
+root_cause: ptxas -O0 places the -64 induction-var init off the first-entry path of a chunked side-effect-free loop, so the +16 latch never reaches zero.
+original_case_id: "10.1_deadloop_0"
+original_source: poc/cuda-10.1_O0_deadloop/*
+unverifiable_versions: [10.0, 10.2, 11.0]
+last_verified: "2026-08-19"
