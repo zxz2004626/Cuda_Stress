@@ -1,0 +1,13 @@
+BUILD cuda-10.1 -Xptxas -O0
+BUILD cuda-10.1 -Xptxas -O1
+BUILD cuda-10.1 -Xptxas -O2
+BUILD cuda-10.1 -Xptxas -O3
+BUILD cuda-11.4 -Xptxas -O0
+BUILD cuda-11.4 -Xptxas -O1
+BUILD cuda-11.4 -Xptxas -O2
+BUILD cuda-11.4 -Xptxas -O3
+BUILD cuda-11.8 -Xptxas -O0
+BUILD cuda-11.8 -Xptxas -O1
+BUILD cuda-11.8 -Xptxas -O2
+BUILD cuda-11.8 -Xptxas -O3
+built 12 variants under /export/d3/xzhanglb/Cuda_Stress/poc/10.1-Op_11.4-Op_11.8-Op_miscompile_0/build

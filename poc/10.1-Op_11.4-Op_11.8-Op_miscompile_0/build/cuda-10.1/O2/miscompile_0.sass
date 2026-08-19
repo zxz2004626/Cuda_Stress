@@ -1,0 +1,83 @@
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+	code for sm_75
+
+Fatbin elf code:
+================
+arch = sm_75
+code version = [1,7]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+
+	code for sm_75
+		Function : _Z11kernel_mainPjj
+	.headerflags    @"EF_CUDA_SM75 EF_CUDA_PTX_SM(EF_CUDA_SM75)"
+        /*0000*/                   MOV R1, c[0x0][0x28] ;                       /* 0x00000a0000017a02 */
+                                                                                /* 0x000fd00000000f00 */
+        /*0010*/                   S2R R0, SR_TID.Y ;                           /* 0x0000000000007919 */
+                                                                                /* 0x000e220000002200 */
+        /*0020*/                   MOV R5, c[0x0][0xc] ;                        /* 0x0000030000057a02 */
+                                                                                /* 0x000fe20000000f00 */
+        /*0030*/                   ULDC.64 UR4, c[0x0][0x160] ;                 /* 0x0000580000047ab9 */
+                                                                                /* 0x000fe20000000a00 */
+        /*0040*/                   MOV R2, RZ ;                                 /* 0x000000ff00027202 */
+                                                                                /* 0x000fe40000000f00 */
+        /*0050*/                   IADD3 R0, RZ, -R0, RZ ;                      /* 0x80000000ff007210 */
+                                                                                /* 0x001fc80007ffe0ff */
+        /*0060*/                   MOV R3, R0 ;                                 /* 0x0000000000037202 */
+                                                                                /* 0x000fca0000000f00 */
+        /*0070*/                   IMAD.HI.U32 R5, P0, R5, c[0x0][0x168], R2 ;  /* 0x00005a0005057a27 */
+                                                                                /* 0x000fcc0007800002 */
+        /*0080*/                   IMAD.HI.U32 R9, R5, 0x3d4317c7, RZ ;         /* 0x3d4317c705097827 */
+                                                                                /* 0x000fe200078e00ff */
+        /*0090*/                   IADD3.X R7, RZ, -0x1, RZ, P0, !PT ;          /* 0xffffffffff077810 */
+                                                                                /* 0x000fca00007fe4ff */
+        /*00a0*/                   IMAD.WIDE.U32 R2, R7, 0x3d4317c7, RZ ;       /* 0x3d4317c707027825 */
+                                                                                /* 0x000fd000078e00ff */
+        /*00b0*/                   IMAD.WIDE.U32 R2, RZ, R5, R2 ;               /* 0x00000005ff027225 */
+                                                                                /* 0x000fce00078e0002 */
+        /*00c0*/                   IADD3 RZ, P0, R9, R2, RZ ;                   /* 0x0000000209ff7210 */
+                                                                                /* 0x000fca0007f1e0ff */
+        /*00d0*/                   IMAD.X R2, RZ, R7, R3, P0 ;                  /* 0x00000007ff027224 */
+                                                                                /* 0x000fd000000e0603 */
+        /*00e0*/                   STG.E.SYS [UR4], R2 ;                        /* 0x00000002ff007986 */
+                                                                                /* 0x000fe2000c10e904 */
+        /*00f0*/                   EXIT ;                                       /* 0x000000000000794d */
+                                                                                /* 0x000fea0003800000 */
+        /*0100*/                   BRA 0x100;                                   /* 0xfffffff000007947 */
+                                                                                /* 0x000fc0000383ffff */
+        /*0110*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0120*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0130*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0140*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0150*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0160*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+        /*0170*/                   NOP;                                         /* 0x0000000000007918 */
+                                                                                /* 0x000fc00000000000 */
+		.............................
+
+
+
+Fatbin ptx code:
+================
+arch = sm_75
+code version = [6,4]
+producer = <unknown>
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions = -O2  
