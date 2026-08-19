@@ -1,5 +1,0 @@
-ptxas info    : 0 bytes gmem
-ptxas info    : Compiling entry function 'test_kernel' for 'sm_86'
-ptxas info    : Function properties for test_kernel
-    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
-ptxas info    : Used 26 registers, used 0 barriers, 384 bytes cmem[0]
