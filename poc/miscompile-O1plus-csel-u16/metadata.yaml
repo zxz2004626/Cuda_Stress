@@ -1,0 +1,37 @@
+id: miscompile-O1plus-csel-u16
+class: miscompile
+status: reduced
+toolchain:
+  nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  target: sm_86
+trigger:
+  good: "-Xptxas=-O0"
+  bad: "-Xptxas=-O1 and above"
+  expected_checksum: 9115
+observed:
+  O0:
+    status: CORRECT
+    checksum: 9115
+  O1:
+    status: WRONG
+    checksum: 1013916571
+  O2:
+    status: WRONG
+    checksum: 1013916571
+  O3:
+    status: WRONG
+    checksum: 1013916571
+sanitizer:
+  tool: compute-sanitizer
+  binaries: ["O0", "O1"]
+  memcheck: "0 errors"
+  initcheck: "0 errors"
+original_case:
+  case_id: generator_ir__6d36cda796a56081
+  path: /export/ssd1/xzhanglb/Cuda_Stress/runs/run-20260820-200439-24b7/differentials/generator_ir__6d36cda796a56081/test.cu
+notes:
+  - Reduced from the CUDA 13.3 O0-vs-O1/O2 differential to a 37-line reproducer (test.cu).
+  - Triggers on CUDA 13.1, 13.2, and 13.3 for sm_86; CUDA 12.5, 12.6, and 13.0 are unaffected.
+  - Uses one block of 256 threads and observes a single output word from tid 2.
+  - The source-correct value is output[2] = 9115; O1 and above write the full untruncated 32-bit input value 1013916571.
+  - Checked with compute-sanitizer: memcheck and initcheck both report 0 errors on O0 and O1.
