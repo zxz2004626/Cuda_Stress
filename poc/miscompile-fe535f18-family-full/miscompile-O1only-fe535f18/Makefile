@@ -1,11 +1,15 @@
-NVCC ?= /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+NVCC ?= /usr/local/cuda-13.3/bin/nvcc
 ARCH ?= sm_86
 NVCCFLAGS ?= -w
 TIMEOUT ?= 10
-SRC := reduced.cu
+SRC ?= reduced.cu
 BUILD_DIR := build
 BIN := repro
+ifeq ($(SRC),test.cu)
 EXPECTED ?= 6285142377
+else
+EXPECTED ?= 413462180
+endif
 OLEVELS := 0 1 2 3
 
 BINS := $(foreach opt,$(OLEVELS),$(BUILD_DIR)/O$(opt)/$(BIN))

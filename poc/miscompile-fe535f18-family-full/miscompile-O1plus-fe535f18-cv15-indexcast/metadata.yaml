@@ -1,0 +1,28 @@
+id: miscompile-O1plus-fe535f18-cv15-indexcast
+class: miscompile
+status: candidate
+source: reduced.cu
+toolchain:
+  nvcc: /usr/local/cuda-13.3/bin/nvcc
+  target: sm_86
+trigger:
+  good: "-Xptxas=-O0"
+  bad: "-Xptxas=-O1, -Xptxas=-O2, -Xptxas=-O3"
+  expected_checksum: 413462180
+observed:
+  O0:
+    status: CORRECT
+    checksum: 413462180
+  O1:
+    status: WRONG
+    checksum: 894037668
+  O2:
+    status: WRONG
+    checksum: 894037668
+  O3:
+    status: WRONG
+    checksum: 894037668
+root_cause_boundary:
+  classification: "CUDA 13.3 ptxas O1/O2/O3 backend differential candidate"
+  trigger_delta: "remove outer (u) cast from the cv_15 input index"
+  parent: "poc/miscompile-O1only-fe535f18/reduced.cu"
