@@ -66,6 +66,10 @@ class GeneratedCase:
     # kernels.  The common driver_kernel mode has an implicit ABI; generator_ir
     # records its variable parameter list and module-global initialization here.
     execution_spec: Dict[str, Any] = field(default_factory=dict)
+    # Optional archived IR (generator_ir only).  Kept out of case_id() and
+    # manifest hashes so byte-for-byte source/input/expected semantics are
+    # unchanged; reducer uses it as a fast exact-load path.
+    ir_blob: Optional[bytes] = None
 
     # -- stable identity ----------------------------------------------------
     @property

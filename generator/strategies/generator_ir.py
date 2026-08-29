@@ -9,6 +9,7 @@ checksum through the Driver API.
 
 from __future__ import annotations
 
+import pickle
 import random
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -217,6 +218,7 @@ class GeneratorIR(Strategy):
 
         program = build_kernel(cfg, template_name=p["template"])
         source = CudaEmitter().rendersrc(program)
+        ir_blob = pickle.dumps(program, protocol=pickle.HIGHEST_PROTOCOL)
         kernel = program.fetch_kernel()
         if kernel is None:
             raise ValueError("generator_ir produced a program without a CUDA kernel")
@@ -255,6 +257,7 @@ class GeneratorIR(Strategy):
             execution_mode="driver_checksum",
             oracle_mode="cross_build",
             execution_spec=execution_spec,
+            ir_blob=ir_blob,
         )
 
     def cpu_oracle(self, input_words: int, seed: int, params: Dict[str, Any],

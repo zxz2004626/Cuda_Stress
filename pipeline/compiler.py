@@ -72,8 +72,12 @@ def _exec(argv: List[str], env: Dict[str, str], timeout: int) -> CmdRecord:
 def nvcc_ptx(tc: Toolchain, src_path: Path, out_ptx: Path,
              timeout: Optional[int] = None) -> CmdRecord:
     env = isolated_env(tc)
+    # -std=c++17: generator_ir's codegen/weave path emits <cooperative_groups.h>
+    # (and C++17-style source); CUDA 13.x's cooperative_groups pulls in libcu++
+    # which hard-requires C++17, while CUDA 12.5 defaults to C++17.  Pin it so
+    # the device PTX frontend compiles identically across all three toolkits.
     argv = [tc.nvcc, f"-arch={tc.arch}", "-ccbin", tc.ccbin,
-            "-ptx", "-o", str(out_ptx), str(src_path)]
+            "-std=c++17", "-ptx", "-o", str(out_ptx), str(src_path)]
     return _exec(argv, env, timeout or DEFAULT_TIMEOUT)
 
 
@@ -81,8 +85,12 @@ def nvcc_standalone_ptx(tc: Toolchain, src_path: Path, out_ptx: Path,
                         timeout: Optional[int] = None) -> CmdRecord:
     """Best-effort PTX extraction for a complete CUDA Runtime program."""
     env = isolated_env(tc)
+    # -std=c++17: generator_ir's codegen/weave path emits <cooperative_groups.h>
+    # (and C++17-style source); CUDA 13.x's cooperative_groups pulls in libcu++
+    # which hard-requires C++17, while CUDA 12.5 defaults to C++17.  Pin it so
+    # the device PTX frontend compiles identically across all three toolkits.
     argv = [tc.nvcc, f"-arch={tc.arch}", "-ccbin", tc.ccbin,
-            "-std=c++14", "-ptx", "-o", str(out_ptx), str(src_path)]
+            "-std=c++17", "-ptx", "-o", str(out_ptx), str(src_path)]
     return _exec(argv, env, timeout or DEFAULT_TIMEOUT)
 
 

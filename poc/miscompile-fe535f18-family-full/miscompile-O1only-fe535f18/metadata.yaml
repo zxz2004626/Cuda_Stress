@@ -1,0 +1,90 @@
+id: miscompile-O1only-fe535f18
+class: miscompile
+status: reduced
+toolchain:
+  nvcc: /usr/local/cuda-13.3/bin/nvcc
+  target: sm_86
+trigger:
+  good: "-Xptxas=-O0, -Xptxas=-O2, -Xptxas=-O3"
+  bad: "-Xptxas=-O1"
+  expected_checksum: 413462180
+observed:
+  O0:
+    status: CORRECT
+    checksum: 413462180
+  O1:
+    status: WRONG
+    checksum: 894037668
+  O2:
+    status: CORRECT
+    checksum: 413462180
+  O3:
+    status: CORRECT
+    checksum: 413462180
+readable_observed:
+  source: test.cu
+  expected_checksum: 6285142377
+  O0:
+    status: CORRECT
+    checksum: 6285142377
+  O1:
+    status: WRONG
+    checksum: 5964855639
+  O2:
+    status: CORRECT
+    checksum: 6285142377
+  O3:
+    status: CORRECT
+    checksum: 6285142377
+sanitizer:
+  tool: compute-sanitizer
+  binaries: ["O0", "O1"]
+  memcheck: "0 errors"
+  initcheck: "0 errors"
+  synccheck: "0 errors"
+  racecheck: "0 hazards"
+size:
+  readable_source:
+    path: test.cu
+    lines: 311
+    bytes: 15352
+  reduced_source:
+    path: reduced.cu
+    lines: 120
+    bytes: 5136
+root_cause_boundary:
+  classification: "CUDA 13.3 ptxas -O1 backend miscompile"
+  evidence:
+    - "nvcc -O0/-O1/-O2/-O3 PTX is identical; only -Xptxas=-O1 changes the final checksum."
+    - "compute-sanitizer memcheck/initcheck/synccheck/racecheck is clean for the readable O0/O1 binaries."
+    - "The compact reproducer was further reduced from the pasted input and revalidated remotely on shuaicpu4."
+  retained_trigger_shape:
+    - "__mul24 contribution inside the ptx_acc_0 integer mixer"
+    - "global-derived 64-bit remainder using (ull)arr_0[0]|1"
+    - "helper_1 call and long loop-carried _fv/_lc_* live state"
+    - "unrolled rs_v_* input-load shape"
+  disappears_when:
+    - "__mul24 is replaced with a constant"
+    - "GPU_SMOD(tid, n) is simplified to 0"
+    - "the cv_15 input load is inlined into the _fv update"
+    - "the 16 unrolled rs_v_* loads are collapsed into a loop"
+    - "__launch_bounds__(512, 2) is removed or weakened to 64/128/256,2 or 512,1"
+original_case:
+  case_id: generator_ir__fe535f18dab5a1bd
+  path: /export/ssd1/xzhanglb/Cuda_Stress/runs/run-20260821-005904-2108/differentials/generator_ir__fe535f18dab5a1bd/test.cu
+notes:
+  - Reduced from the CUDA 13.3 O1-only differential.
+  - Formatted for readability with one statement per line rather than whitespace compaction.
+  - UB checks cover initialized input/global memory, guarded output write, retained synchronization, and compute-sanitizer memcheck/initcheck/synccheck/racecheck.
+  - Further reduced to 311 lines / 15.0 KiB; launch block size is 1 and the only shared array (pc_comm_0[2]) is explicitly initialized before use.
+  - During reduction, __ldcg, __clzll, var_1/var_2 parameters, GPU_GROUP_DIVERGE, the pc_r1_0 shared read, and 6 of the 16 _lc_* state variables were removed while preserving the O1-only divergence.
+  - arr_0 was reduced from [16][16][11] to [16]; the launch block was reduced from 2 threads to 1.
+  - __mul24 is still required in the final sample: replacing it with 0 now makes the O1 divergence disappear.
+  - Many semantically equivalent simplifications (e.g. replacing GPU_SMOD(tid, n) with 0, or collapsing the 16 unrolled rs_v_* loads into a loop) make the divergence disappear; the remaining shape is intentionally retained.
+  - Additional remote reduction on shuaicpu4 changed the compact source from 99 lines / 9.0 KiB to 93 lines / 8.4 KiB by simplifying host allocation/checksum code and replacing the cv_14 multiplicative update with cv_14 ^= i_0.
+  - A follow-up expression cleanup pass reduced the compact source to 92 lines / 5.6 KiB by folding cast trees, using u/ull aliases, simplifying helper_1, converting bo/ii arrays to scalars, reducing arr_0 from long long to int, and fusing several xor/update expressions.
+  - Full O0/O1/O2/O3 checking rejected many otherwise equivalent simplifications, including folding cv_15/cv_17/cv_31/dsw_0 to constants, inlining cv_15 into _fv, replacing pc_r2_0/pc_r3_0 mixes with zero, dropping the la_arr block, dropping __sad or max/min around __mul24, weakening helper_1 loops/pragmas, removing the GPU_SMOD zero guard, and weakening launch_bounds below 512,2.
+  - A fixed-argument constant propagation pass reduced the compact source to 89 lines / 4.4 KiB while preserving the exact O0/O1/O2/O3 checksums. Accepted folds include cv_12's var_0 operand to 1, several _lc_* initializers, _lc_10 to 29960, __popc(_lc_10) to 6, one input[0] load to *input, and removal of many redundant casts/suffixes.
+  - The same pass rejected replacing cv_5/pc_val_0/ptx_acc_0 inputs with cv_2 or 12345, replacing individual rs_v/b*/j* R(tid+k) loads with 12345, deleting the cv_14 ^= i_0 net-zero update, fusing the i_4 loop, simplifying the i_5 bound to 2, changing arr_0 from int to unsigned, removing the cv_15 index cast or 32ll type, and constant-folding helper intrinsics.
+  - The final default reduced.cu prioritizes readability over whitespace compaction and does not require checksum equivalence with prior reductions. It keeps the relaxed condition O0/O2/O3 agree while O1 differs.
+  - Under the relaxed condition, __popc(_lc_15) was replaced with 21, _lc_1/_lc_2/_lc_10 and several final xor terms were removed, and helper_1(_lc_0, _lc_1, _lc_2, _lc_3) became helper_1(_lc_0, 0, 0, _lc_3).

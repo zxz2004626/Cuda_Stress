@@ -78,13 +78,17 @@ _CATALOG_EXPR_CATEGORIES = frozenset({
 
 # Dot-product intrinsics have overlapping signed/unsigned/packed overloads that
 # scalar (uint,uint,int) arguments cannot disambiguate, so they are excluded.
+#
 # The SIGNED multiply-high / 24-bit-multiply intrinsics (__mul64hi/__mulhi/
-# __mul24) produce DIFFERENT results on nvcc 11.5 vs 13.1 for negative operands
-# -- a real cross-version divergence that would break the deterministic-checksum
-# oracle's premise.  Their UNSIGNED counterparts are deterministic and kept.
+# __mul24) are a real cross-version DIVERGENCE surface -- nvcc historically
+# produced different results for negative operands across versions.  They were
+# once blocked here because the random operand pool mixes in out-of-range /
+# undefined inputs.  They are now RE-ENABLED with operands constrained to each
+# intrinsic's well-defined domain (see _kx_constrain_signed24), so any
+# remaining cross-version difference is a genuine compiler bug, not UB.  The
+# unsigned counterparts stay available through the normal catalog path.
 _CATALOG_EXPR_NAME_BLOCK = frozenset({
     "__dp4a", "__dp2a_lo", "__dp2a_hi",
-    "__mul64hi", "__mulhi", "__mul24",
 })
 
 
@@ -723,8 +727,14 @@ class ExprGen:
         if not candidates:
             return self._kx_terminal(t)
         intr = self.ctx.rnd_choice(list(candidates))
-        args = [self._kx_catalog_arg(pt, role, depth)
-                for pt, role in zip(intr.params, intr.roles)]
+        if intr.name == "__mul24":
+            # __mul24's operands must be 24-bit signed ints; constrain each
+            # operand to [-2^23, 2^23-1] so the call is UB-free and any
+            # cross-version difference is a genuine compiler bug, not UB.
+            args = [self._kx_signed24_arg(depth) for _ in intr.params]
+        else:
+            args = [self._kx_catalog_arg(pt, role, depth)
+                    for pt, role in zip(intr.params, intr.roles)]
         result = Call(intr.result, fn=intr.name, args=args,
                       result_ty=intr.result)
         if type(self._base(intr.result)) is not type(t):
@@ -745,6 +755,29 @@ class ExprGen:
         else:  # "value" (and any unexpected role): a fuzzed sub-expression.
             inner = self.kx_generate(ptype, depth + 1)
         return Cast(ptype, to=ptype, arg=inner)
+
+    def _kx_signed24_arg(self, depth: int) -> Expr:
+        """A signed 24-bit operand for __mul24, constrained to its domain.
+
+        Returns a value in [-2^23, 2^23-1] -- the exact range in which __mul24
+        is defined (outside it the intrinsic is UB, which would poison the
+        checksum oracle with false flakiness).  The sign extension is done
+        with unsigned ops + an XOR/subtract bias so it is UB-free on every
+        compiler (no signed shift / signed overflow)::
+
+            u = (unsigned)inner & 0xFFFFFF        // low 24 bits, [0, 2^24-1]
+            v = u ^ 0x800000                      // toggle bit 23, still < 2^24
+            x = (int)v - 0x800000                 // [-2^23, 2^23-1]
+
+        A cross-version difference on these in-domain operands is a genuine
+        __mul24 compiler bug -- the divergence surface being re-enabled."""
+        inner = self.kx_generate(T.i32, depth + 1)
+        u = BinOp(T.u32, op=Arith.BAND,
+                  lhs=Cast(T.u32, to=T.u32, arg=inner),
+                  rhs=Lit(T.u32, value=0xFFFFFF))
+        v = BinOp(T.u32, op=Arith.BXOR, lhs=u, rhs=Lit(T.u32, value=0x800000))
+        x = Cast(T.i32, to=T.i32, arg=v)
+        return BinOp(T.i32, op=Arith.SUB, lhs=x, rhs=Lit(T.i32, value=0x800000))
 
     # ------------------------------------------------------------------
     # CUDA FP/dpx surface

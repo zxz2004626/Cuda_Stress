@@ -1,0 +1,47 @@
+id: miscompile-O23plus-fe535f18-aggressive
+class: miscompile
+status: reduced
+source: reduced.cu
+toolchain:
+  nvcc: /usr/local/cuda-13.3/bin/nvcc
+  target: sm_86
+trigger:
+  good: "-Xptxas=-O0, -Xptxas=-O1"
+  bad: "-Xptxas=-O2, -Xptxas=-O3"
+  expected_checksum: 4096945828
+observed:
+  O0:
+    status: CORRECT
+    checksum: 4096945828
+  O1:
+    status: CORRECT
+    checksum: 4096945828
+  O2:
+    status: WRONG
+    checksum: 1225920164
+  O3:
+    status: WRONG
+    checksum: 1225920164
+resources:
+  O0: "64 registers, 160 bytes stack"
+  O1: "64 registers, 80 bytes stack"
+  O2: "64 registers, 112 bytes stack"
+  O3: "64 registers, 112 bytes stack"
+root_cause_boundary:
+  classification: "CUDA 13.3 ptxas O2/O3 backend miscompile"
+  aggressive_change: "single-thread shared-memory handoff folded to pc_r2_0 = 0 and pc_r3_0 = 0"
+  required:
+    - "__launch_bounds__(512, 2) or __launch_bounds__(1024, 2)"
+    - "fallthrough switch on tid & 3"
+    - "surrounding long-live integer mixer state"
+  disappears_when:
+    - "__launch_bounds__(512, 2) is removed"
+    - "fallthrough switch is replaced with constant 1567090485"
+    - "fallthrough switch is replaced with equivalent straight-line computation"
+    - "__launch_bounds__ is weakened to 512, 512,1, or 256,2"
+    - "__launch_bounds__ is strengthened to 512,3 in this aggressive variant"
+    - "no launch-bounds metadata is used and --maxrregcount=32..128 is applied"
+notes:
+  - Derived from poc/miscompile-O1only-fe535f18/reduced.cu.
+  - This variant is intentionally not checksum-equivalent to the O1-only sample.
+  - The root-cause boundary points to launch-bounds metadata selecting a faulty ptxas O2/O3 backend layout, not merely to register count pressure.

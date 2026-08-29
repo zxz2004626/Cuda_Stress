@@ -73,20 +73,10 @@ def test_dir_for(run_dir: Path, case_id: str) -> Path:
 
 
 def write_testcase_artifacts(test_dir: Path, case) -> None:
-    test_dir.mkdir(parents=True, exist_ok=True)
-    (test_dir / "test.cu").write_text(case.source)
-    (test_dir / "input.bin").write_bytes(case.input_bytes)
-    (test_dir / "expected.bin").write_bytes(case.expected_bytes)
-    (test_dir / "manifest.json").write_text(json.dumps(case.manifest(), indent=2, sort_keys=True))
-    (test_dir / "generation.json").write_text(json.dumps({
-        "generator_version": case.generator_version,
-        "config_seed": case.config_seed,
-        "test_seed": case.test_seed,
-        "strategy": case.strategy,
-        "strategy_params": case.params,
-        "execution_mode": case.execution_mode,
-        "oracle_mode": case.oracle_mode,
-    }, indent=2, sort_keys=True))
+    # Single writer keeps every artifact (source, bins, manifest, generation.json,
+    # and the optional generator_ir program.pkl / program.ir.txt) consistent.
+    from .manifest import write_testcase_dir
+    write_testcase_dir(test_dir, case, case.generator_version, case.config_seed)
 
 
 def append_ledger(run_dir: Path, record: Dict[str, Any]) -> None:

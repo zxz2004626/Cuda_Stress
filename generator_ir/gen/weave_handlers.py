@@ -277,7 +277,11 @@ def apply_feature_gen_weight(enabled: bool = False) -> None:
         w = 1.0 if enabled else 0.0
     for name in _FEATURE_COVERAGE_GENS:
         if name in REGISTRY:
-            REGISTRY[name].weight = w
+            # inline_ptx_int is HARD-disabled regardless of the feature-gens
+            # flag: the pipeline must never emit inline-PTX testcases (the
+            # checksum oracle cannot reason about opaque asm).  Everything else
+            # follows the requested weight.
+            REGISTRY[name].weight = 0.0 if name == "inline_ptx_int" else w
 
 
 # Feature-coverage blocks are registered with weight 0 unless enabled.

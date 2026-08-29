@@ -4,3 +4,14 @@ generator/__pycache__/*
 generator/strategies/__pycache__/*
 tools/__pycache__/*
 runs/
+
+# Compiler-generated build artifacts (regenerable from test.cu). These were
+# historically committed under poc/*/build and corpus/accepted/*/builds.
+poc/**/build/
+corpus/**/builds/
+
+# Local runtime state / scratch / logs
+.sweep/
+queue/
+reduce_work/
+runs_loop*.log

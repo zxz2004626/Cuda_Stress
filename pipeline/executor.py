@@ -286,7 +286,8 @@ def _clean_spec_value(value: Any, field: str) -> str:
 
 
 def _write_driver_job_spec(config: Config, case: GeneratedCase, build_dir: Path,
-                           run_index: Any, input_salt: int) -> Path:
+                           run_index: Any, input_salt: int,
+                           timeout_ms: int = 15000) -> Path:
     spec = case.execution_spec
     if not isinstance(spec, dict) or spec.get("kind") != "generator_ir_checksum":
         raise ValueError("generator_ir Driver execution_spec is missing or unsupported")
@@ -313,6 +314,7 @@ def _write_driver_job_spec(config: Config, case: GeneratedCase, build_dir: Path,
         f"input_dist={_clean_spec_value(spec.get('input_distribution', 'hash'), 'input_dist')}",
         f"input_salt={int(input_salt) & 0xFFFFFFFF}",
         f"guards={int(config.execution.get('device_memory_guard_words', 8))}",
+        f"timeout_ms={int(timeout_ms)}",
     ]
     for arg in spec["args"]:
         kind = str(arg.get("kind", ""))
@@ -353,14 +355,16 @@ def _run_driver_checksum(config: Config, tc: Toolchain,
     exec_path.unlink(missing_ok=True)
     if not cubin.exists():
         return RunResult(status="BAD_SPEC", output_words=None, error="cubin missing")
+    limit = float(timeout or config.execution.get("run_timeout", 60))
     try:
-        spec_path = _write_driver_job_spec(config, case, build_dir, run_index, input_salt)
+        spec_path = _write_driver_job_spec(
+            config, case, build_dir, run_index, input_salt,
+            timeout_ms=int(limit * 1000))
     except (KeyError, TypeError, ValueError) as exc:
         info = {"status": "BAD_SPEC", "returncode": EXIT_BAD_SPEC, "error": str(exc)}
         exec_path.write_text(json.dumps(info, indent=2))
         return RunResult(status="BAD_SPEC", output_words=None, error=str(exc), execution=info)
 
-    limit = float(timeout or config.execution.get("run_timeout", 60))
     restart_after = int(config.execution.get("runner_restart_after", 0))
     try:
         if restart_after > 0:

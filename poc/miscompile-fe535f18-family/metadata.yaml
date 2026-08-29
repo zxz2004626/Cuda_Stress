@@ -1,0 +1,26 @@
+id: miscompile-fe535f18-family
+kind: cuda-ptxas-miscompile-family
+toolchain: cuda-13.3
+arch: sm_86
+root_cause: ptxas generates gridDim.y << gridDim.y instead of gridDim.y << threadIdx.y for a nested dynamic shift count in helper_1
+variants:
+  - name: o1only
+    source: o1only.cu
+    differential: O1 differs from O0/O2/O3
+    correct_output: 2053990987
+    wrong_output: 2534566475
+  - name: o1plus-cv15-indexcast
+    source: o1plus-cv15-indexcast.cu
+    differential: O1/O2/O3 differ from O0
+    correct_output: 2053990987
+    wrong_output: 2534566475
+  - name: o23plus-aggressive
+    source: o23plus-aggressive.cu
+    differential: O2/O3 differ from O0/O1
+    correct_output: 1442507339
+    wrong_output: 2866448971
+  - name: o23plus-i1trip
+    source: o23plus-i1trip.cu
+    differential: O2/O3 differ from O0/O1
+    correct_output: 4123129483
+    wrong_output: 3429195403

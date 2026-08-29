@@ -52,6 +52,10 @@ std::atomic<bool> g_done{false};
 std::atomic<bool> g_timed_out{false};
 int g_timeout_ms = 60000;
 
+std::atomic<bool> g_ir_job_done{false};
+std::atomic<bool> g_ir_job_timed_out{false};
+int g_ir_job_timeout_ms = 0;
+
 void watchdog() {
     for (int waited = 0; waited < g_timeout_ms && !g_done.load(std::memory_order_acquire);
          waited += 10)
@@ -59,6 +63,18 @@ void watchdog() {
     if (g_done.load(std::memory_order_acquire)) return;
     g_timed_out = true;
     fprintf(stderr, "[runner] watchdog: execution exceeded %d ms, aborting\n", g_timeout_ms);
+    fflush(stderr);
+    _Exit(ST_TIMEOUT);
+}
+
+void ir_job_watchdog() {
+    for (int waited = 0; waited < g_ir_job_timeout_ms && !g_ir_job_done.load(std::memory_order_acquire);
+         waited += 10)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    if (g_ir_job_done.load(std::memory_order_acquire)) return;
+    g_ir_job_timed_out = true;
+    fprintf(stderr, "[runner] IR-job watchdog: execution exceeded %d ms, aborting\n",
+            g_ir_job_timeout_ms);
     fflush(stderr);
     _Exit(ST_TIMEOUT);
 }
@@ -179,6 +195,7 @@ struct IrSpec {
     unsigned long long in_size = 0;
     unsigned long long input_salt = 0;
     unsigned long long guards = 8;
+    unsigned long long timeout_ms = 0;
     std::vector<IrArg> args;
     std::vector<IrGlobal> globals;
 };
@@ -231,14 +248,16 @@ bool load_ir_spec(const char* path, IrSpec* spec, std::string* error) {
         } else if (key == "block") {
             if (!parse_dims(value.c_str(), spec->block)) { *error = "bad block"; return false; }
         } else if (key == "shared_bytes" || key == "n" || key == "buf_size" ||
-                   key == "in_size" || key == "input_salt" || key == "guards") {
+                   key == "in_size" || key == "input_salt" || key == "guards" ||
+                   key == "timeout_ms") {
             if (!parse_uint(value.c_str(), &number)) { *error = "bad integer for " + key; return false; }
             if (key == "shared_bytes") spec->shared_bytes = number;
             else if (key == "n") spec->n = number;
             else if (key == "buf_size") spec->buf_size = number;
             else if (key == "in_size") spec->in_size = number;
             else if (key == "input_salt") spec->input_salt = number;
-            else spec->guards = number;
+            else if (key == "guards") spec->guards = number;
+            else spec->timeout_ms = number;
         } else if (key == "arg") {
             IrArg arg;
             size_t colon = value.find(':');
@@ -355,7 +374,13 @@ int run_ir_job(CUcontext ctx, const DeviceInfo& info, const char* spec_path,
         if (d_out) cuMemFree(d_out);
         if (mod) cuModuleUnload(mod);
     };
+    std::thread wd;
+    auto stop_watchdog = [&]() {
+        g_ir_job_done.store(true, std::memory_order_release);
+        if (wd.joinable()) wd.join();
+    };
     auto write_error = [&](uint32_t status, const std::string& message) -> int {
+        stop_watchdog();
         char jbuf[4096];
         snprintf(jbuf, sizeof(jbuf),
             "{\n  \"status\": \"%s\",\n  \"status_code\": %u,\n"
@@ -457,12 +482,17 @@ int run_ir_job(CUcontext ctx, const DeviceInfo& info, const char* spec_path,
     }
 
     auto kernel_started = std::chrono::steady_clock::now();
+    g_ir_job_timeout_ms = (spec.timeout_ms > 0) ? (int)spec.timeout_ms : g_timeout_ms;
+    g_ir_job_done.store(false, std::memory_order_release);
+    g_ir_job_timed_out.store(false, std::memory_order_release);
+    wd = std::thread(ir_job_watchdog);
     rc = cuLaunchKernel(func,
                         spec.grid[0], spec.grid[1], spec.grid[2],
                         spec.block[0], spec.block[1], spec.block[2],
                         (unsigned)spec.shared_bytes, nullptr,
                         kernel_params.data(), nullptr);
     if (rc == CUDA_SUCCESS) rc = cuCtxSynchronize();
+    stop_watchdog();
     long long kernel_us = since_us(kernel_started);
     if (rc != CUDA_SUCCESS) return write_error(ST_CUDA_ERROR, cu_err(rc));
 

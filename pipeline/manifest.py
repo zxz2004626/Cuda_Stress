@@ -12,6 +12,7 @@ A testcase dir is the atomic unit of work in the queue and the archive:
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -24,6 +25,10 @@ def write_testcase_dir(test_dir: Path, case: GeneratedCase, generator_version: s
     (test_dir / "test.cu").write_text(case.source)
     (test_dir / "input.bin").write_bytes(case.input_bytes)
     (test_dir / "expected.bin").write_bytes(case.expected_bytes)
+    ir_blob = getattr(case, "ir_blob", None)
+    if ir_blob is not None:
+        (test_dir / "program.pkl").write_bytes(ir_blob)
+        _write_program_ir_text(test_dir / "program.ir.txt", ir_blob)
     manifest = case.manifest()
     (test_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
     gen = {
@@ -37,6 +42,41 @@ def write_testcase_dir(test_dir: Path, case: GeneratedCase, generator_version: s
     }
     (test_dir / "generation.json").write_text(json.dumps(gen, indent=2, sort_keys=True))
     return manifest
+
+
+def _write_program_ir_text(path: Path, ir_blob: bytes) -> None:
+    """Best-effort human-readable IR dump; never fails the case write."""
+    try:
+        program = pickle.loads(ir_blob)
+        from generator_ir.ir.traversal import child_nodes, traverse
+        lines: list = []
+        for node in traverse(program):
+            lines.append(_fmt_ir_node(node))
+            for child in child_nodes(node):
+                lines.append(f"    child: {_fmt_ir_node(child)}")
+        path.write_text("\n".join(lines) + "\n")
+    except Exception:  # noqa: BLE001
+        path.unlink(missing_ok=True)
+
+
+def _fmt_ir_node(node) -> str:
+    if node is None:
+        return "<None>"
+    name = type(node).__name__
+    try:
+        if hasattr(node, "name") and isinstance(getattr(node, "name"), str):
+            return f"{name}(name={getattr(node, 'name')!r})"
+        if hasattr(node, "stmts") and isinstance(getattr(node, "stmts"), list):
+            return f"{name}(stmts={len(getattr(node, 'stmts'))})"
+        if hasattr(node, "op") and hasattr(node, "value"):
+            return f"{name}(op={getattr(node, 'op')!r}, value={getattr(node, 'value')!r})"
+        if hasattr(node, "op"):
+            return f"{name}(op={getattr(node, 'op')!r})"
+        if hasattr(node, "ty") and hasattr(node, "value"):
+            return f"{name}(ty={getattr(node, 'ty')!r}, value={getattr(node, 'value')!r})"
+    except Exception:  # noqa: BLE001
+        pass
+    return name
 
 
 def read_testcase_dir(test_dir: Path) -> Dict[str, Any]:

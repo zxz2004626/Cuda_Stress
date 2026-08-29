@@ -1073,7 +1073,7 @@ class PTXStressTemplate(_SharedTemplate):
     def _build_int_intrinsics(self, ctx: GenContext, acc: Var, tid: Var,
                             n_u: Expr, input_var: Var, kx_is_cuda: bool,
                             sm: int) -> List[Stmt]:
-        """__sad, __mul24 and nested min/max chains (VABSDIFF / MUL24 /
+        """__usad, __mul24 and nested min/max chains (VABSDIFF / MUL24 /
         VMIN/VMAX selection)."""
         stmts: List[Stmt] = []
         names = [ctx.kx_fresh_name(p) for p in ("ii_a", "ii_b", "ii_c", "ii_d")]
@@ -1094,7 +1094,7 @@ class PTXStressTemplate(_SharedTemplate):
         sad = Var(T.u32, name=sad_name)
         ctx.kx_declare(sad)
         stmts.append(Declare(name=sad_name, gtype=T.u32,
-                             init=Call(T.u32, fn="__sad",
+                             init=Call(T.u32, fn="__usad",
                                        args=[a, b, Lit(T.u32, value=0)],
                                        result_ty=T.u32)))
 
