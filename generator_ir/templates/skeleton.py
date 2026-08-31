@@ -168,3 +168,30 @@ class KernelTemplate(ABC):
                        rhs=expr_gen.kx_generate(T.u32))
         stmts.extend(self.flat_result(ctx, result, T.u32))
         return stmts
+
+
+class GenericKernelScaffold(KernelTemplate):
+    """Template-free carrier for the generic baseline grammar.
+
+    The assembler historically required a ``KernelTemplate`` even when all
+    useful statements came from ``StmtGen``.  This empty, unregistered
+    scaffold supplies only neutral launch metadata; it is deliberately absent
+    from the template catalog and never contributes source-level structure.
+    """
+
+    def __init__(self, n_elements: int = 32768) -> None:
+        self._n_elements = max(1, int(n_elements))
+
+    @property
+    def name(self) -> str:
+        return "generic_baseline"
+
+    @property
+    def features(self) -> Set[str]:
+        return set()
+
+    def build_body(self, ctx: "GenContext") -> List[Stmt]:
+        return []
+
+    def kx_required_n_elements(self) -> int:
+        return self._n_elements

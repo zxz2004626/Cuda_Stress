@@ -74,7 +74,8 @@ class SingleCompilerFuzzer:
                  compiler_path: Optional[str] = None, num_repeats: int = 5,
                  run_timeout: int = 300, regression_threshold: float = 0.05,
                  alpha: float = 0.01, cleanup_tmp: bool = True,
-                 mutation_mode: str = "full", diversity: bool = True) -> None:
+                 mutation_mode: str = "full", diversity: bool = True,
+                 generic_baseline: bool = False) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.target = backend
@@ -82,6 +83,7 @@ class SingleCompilerFuzzer:
         self.cleanup_tmp = cleanup_tmp
         self.mutation_mode = mutation_mode
         self.diversity = diversity
+        self.generic_baseline = bool(generic_baseline)
         if arch is None:
             arch = "gfx908" if backend == "hip" else "sm_75"
         self.compiler = create_compiler(backend=backend, arch=arch,
@@ -132,6 +134,7 @@ class SingleCompilerFuzzer:
             seed = self.seed + self.stats.total_generated
             config = GenConfig(seed=seed, target=self.target,
                                isa=self.compiler.isa,
+                               generic_baseline=self.generic_baseline,
                                **self._kx_diversity_profile(seed))
         opt_levels = opt_levels or ["-O3"]
 
@@ -250,6 +253,13 @@ class SingleCompilerFuzzer:
                   fresh_ratio: float = 0.3) -> FuzzerStats:
         from generator_ir.gen.options import GenConfig
 
+        if self.generic_baseline:
+            if templates:
+                raise ValueError("generic baseline does not accept templates")
+            if corpus_dir:
+                raise ValueError("generic baseline accepts fresh cases only")
+            test_mutations = False
+
         opt_levels = opt_levels or ["-O3"]
         corpus = None
         if corpus_dir:
@@ -271,7 +281,8 @@ class SingleCompilerFuzzer:
                 config = GenConfig(seed=self.seed + i, complexity=complexity,
                                    amplify_iters=2048,
                                    target=self.target,
-                                   isa=self.compiler.isa)
+                                   isa=self.compiler.isa,
+                                   generic_baseline=self.generic_baseline)
                 if templates:
                     config.template_name = templates[i % len(templates)]
                 try:

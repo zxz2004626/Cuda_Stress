@@ -1,0 +1,27 @@
+id: crash-all-cicc-unroll-peel
+title: cicc NULL-deref on nested pragma-unrolled loops with break and threadfence
+class: crash
+trigger_opt: [O0, O1, O2, O3]
+correct_value: "compiles cleanly (rc=0)"
+buggy_value: "SIGSEGV in cicc (rc=139)"
+arch_verified: sm_75
+arch_note: arch-independent (verified sm_50..sm_90 and compute_75 on cuda-12.5); -G (device debug) avoids the crash
+range_sm75:
+  introduced: "12.5"
+  last_bad: "13.3"
+  fixed_in: null
+  note: 11.5 clean; 12.5 and 13.0..13.3 crash at all -O levels; 12.0..12.4 untested (toolkits unavailable)
+root_cause: >-
+  NULL-pointer dereference inside cicc's loop unroll/peel bookkeeping. A hash-map
+  lookup of loop info returns NULL for the outer runtime-bounded '#pragma unroll'
+  loop containing a nested '#pragma unroll 2' loop (runtime-uniform break +
+  __threadfence), and the result is dereferenced unconditionally
+  (mov 0x18(%rax) with rax=0). The binary's '.peel' / '.peel.begin' /
+  'max-pragma-upperbound-unroll' strings locate the crash in the pragma-driven
+  unroll/peeling machinery. Trigger details: outer unroll factor must be 6..8 with
+  a runtime uniform bound; inner loop unroll factor exactly 2, even bound >= 4,
+  uniform break; helper must be called from a kernel loop so it is not inlined.
+original_case_id: case_dbab15f68f04b25c
+original_source: runs/case_dbab15f68f04b25c_matrix/test.cu
+unverifiable_versions: ["12.0", "12.1", "12.2", "12.3", "12.4"]
+last_verified: "2026-09-01"

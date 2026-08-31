@@ -81,3 +81,19 @@ def kx_build_default_registry() -> TemplateRegistry:
     reg.register(VectorizationStressTemplate())
     reg.register(PTXStressTemplate())
     return reg
+
+
+def kx_build_named_registry(name: str = "default") -> TemplateRegistry:
+    """Build a template registry by experiment-facing catalog name.
+
+    The default catalog is the production generator catalog.  The Raw-LLM
+    catalog is kept separate so RQ1 Arm B can be run without making those
+    baseline families available to ordinary generator_ir campaigns.
+    """
+    key = (name or "default").strip().lower().replace("-", "_")
+    if key in {"default", "paper", "passspec"}:
+        return kx_build_default_registry()
+    if key in {"raw_llm", "rawllm", "arm_b", "armb"}:
+        from generator_ir.templates.raw_llm import kx_build_raw_llm_registry
+        return kx_build_raw_llm_registry()
+    raise ValueError(f"unknown generator_ir template catalog {name!r}")

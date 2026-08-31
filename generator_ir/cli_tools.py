@@ -65,6 +65,7 @@ def _make_config(args, seed: int):
         observable_fold=getattr(args, "observable_fold", False),
         allow_volatile=getattr(args, "allow_volatile", False),
         codegen=getattr(args, "codegen", False),
+        generic_baseline=getattr(args, "generic_baseline", False),
         **diversity,
     )
 
@@ -101,9 +102,17 @@ def _translator_for(backend: str):
 
 def cmd_build(args: argparse.Namespace) -> int:
     from generator_ir.gen.assembler import build_kernel
-    from generator_ir.gen import weave_blocks as _wb  # noqa: F401  (registration)
-    from generator_ir.gen.weave_handlers import apply_feature_gen_weight
-    apply_feature_gen_weight(getattr(args, "enable_feature_gens", False))
+    generic = bool(getattr(args, "generic_baseline", False))
+    if generic and getattr(args, "template", None) is not None:
+        raise ValueError("--generic-baseline cannot be combined with --template")
+    if generic and getattr(args, "codegen", False):
+        raise ValueError("--generic-baseline cannot be combined with --codegen")
+    if generic and getattr(args, "enable_feature_gens", False):
+        raise ValueError("--generic-baseline cannot be combined with --enable-feature-gens")
+    if not generic:
+        from generator_ir.gen import weave_blocks as _wb  # noqa: F401  (registration)
+        from generator_ir.gen.weave_handlers import apply_feature_gen_weight
+        apply_feature_gen_weight(getattr(args, "enable_feature_gens", False))
 
     os.makedirs(args.output_dir, exist_ok=True)
     kx_translator = _translator_for(args.backend)

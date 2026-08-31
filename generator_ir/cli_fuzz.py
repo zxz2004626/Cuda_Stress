@@ -65,6 +65,7 @@ def _make_config(args, seed: int):
         observable_fold=getattr(args, "observable_fold", False),
         allow_volatile=getattr(args, "allow_volatile", False),
         codegen=getattr(args, "codegen", False),
+        generic_baseline=getattr(args, "generic_baseline", False),
         **diversity,
     )
 
@@ -99,8 +100,11 @@ def _program_mode_matches(program, args) -> bool:
     # Older corpus pickles predate the explicit codegen marker; accept those
     # through the observable compatibility check above.
     if cfg is None or "codegen" not in vars(cfg):
-        return True
-    return bool(cfg.codegen) == bool(getattr(args, "codegen", False))
+        return not bool(getattr(args, "generic_baseline", False))
+    if bool(cfg.codegen) != bool(getattr(args, "codegen", False)):
+        return False
+    return bool(getattr(cfg, "generic_baseline", False)) == bool(
+        getattr(args, "generic_baseline", False))
 
 
 def _perf_data(result: dict, use_clock64: bool) -> dict:
@@ -129,9 +133,29 @@ def _perf_data(result: dict, use_clock64: bool) -> dict:
 
 
 def kx_cmd_fuzz(args: argparse.Namespace) -> int:
-    from generator_ir.gen import weave_blocks as _wb  # noqa: F401  (registration)
-    from generator_ir.gen.weave_handlers import apply_feature_gen_weight
-    apply_feature_gen_weight(getattr(args, "enable_feature_gens", False))
+    generic = bool(getattr(args, "generic_baseline", False))
+    if generic:
+        if getattr(args, "templates", None):
+            raise ValueError("--generic-baseline cannot be combined with --templates")
+        if getattr(args, "codegen", False):
+            raise ValueError("--generic-baseline cannot be combined with --codegen")
+        if getattr(args, "enable_feature_gens", False):
+            raise ValueError(
+                "--generic-baseline cannot be combined with --enable-feature-gens")
+        if getattr(args, "corpus_dir", None):
+            raise ValueError(
+                "--generic-baseline accepts fresh cases only; --corpus-dir is not allowed")
+        if getattr(args, "old_compiler", None) or getattr(args, "new_compiler", None):
+            raise ValueError(
+                "generic baseline cross-compiler campaigns belong in the main "
+                "Cuda_Stress pipeline; generator_ir fuzz cross modes apply mutations")
+        # Mutations encode optimization-aware relationships and would make this
+        # arm cease to be a generator-only baseline.
+        args.no_mutations = True
+    else:
+        from generator_ir.gen import weave_blocks as _wb  # noqa: F401  (registration)
+        from generator_ir.gen.weave_handlers import apply_feature_gen_weight
+        apply_feature_gen_weight(getattr(args, "enable_feature_gens", False))
 
     old_path = getattr(args, "old_compiler", None)
     new_path = getattr(args, "new_compiler", None)
@@ -151,6 +175,7 @@ def _fuzz_single_compiler(args: argparse.Namespace) -> int:
         regression_threshold=args.threshold,
         cleanup_tmp=not args.keep_tmp,
         mutation_mode=getattr(args, "mutation_mode", "full"),
+        generic_baseline=getattr(args, "generic_baseline", False),
     )
     stats = fuzzer.kx_fuzz_loop(
         num_seeds=args.seeds, templates=args.templates,

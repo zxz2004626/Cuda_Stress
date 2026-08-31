@@ -170,6 +170,9 @@ class ExprGen:
 
     def _kind_table(self, t: GType, depth: int) -> List[Tuple[str, float]]:
         """(kind, base weight) for a target type at a recursion depth."""
+        if getattr(self.ctx.config, "generic_baseline", False):
+            return self._generic_kind_table(t)
+
         table: List[Tuple[str, float]] = [("terminal", 2.0)]
         scalar_int = self._is_int(t) and not self._is_vec(t)
         scalar_fp = self._is_fp(t) and not self._is_vec(t)
@@ -238,6 +241,45 @@ class ExprGen:
             table += [("comparison", 3.0), ("logic", 1.5)]
         # warp_vote exprs: suppressed on gfx1200 (warp-sync semantics are
         # problematic there; mirrors the original's is_gfx1200 gate).
+        isa = getattr(self.ctx.config, "isa", "")
+        gfx1200 = isa.startswith("gfx") and self.ctx.kx_arch_number() == 1200
+        if (self.ctx.config.enable_warp and self._uniform_context()
+                and self._arch().warp_sync and not gfx1200):
+            table.append(("warp_vote", 0.4))
+        return table
+
+    def _generic_kind_table(self, t: GType) -> List[Tuple[str, float]]:
+        """Explicit allow-list for the template-free evaluation baseline.
+
+        Individual language/GPU primitives remain available, but curated
+        target relationships (wide-multiply/divmod shapes, cache/DPX/packed
+        CUDA paths, synthetic divergence shapes, and catalog-driven feature
+        targeting) do not.  Keeping this as a positive list prevents future
+        targeted expression kinds from silently entering the baseline.
+        """
+        table: List[Tuple[str, float]] = [("terminal", 2.0)]
+        scalar_int = self._is_int(t) and not self._is_vec(t)
+        scalar_fp = self._is_fp(t) and not self._is_vec(t)
+        if scalar_int or scalar_fp:
+            table += [
+                ("binary", 3.0), ("cast", 1.0),
+                ("cond_expr", 0.8), ("mixed_ternary", 0.5),
+                ("cast_chain", 0.6),
+            ]
+        if scalar_int:
+            table += [
+                ("unary", 1.2), ("safe_bin", 1.5),
+                ("shift_chain", 0.7), ("intrinsic", 0.8),
+                ("mixed_binary", 0.6),
+            ]
+            if self._device_arrays_available():
+                table.append(("device_array_read", 0.5))
+            if self._helpers_available():
+                table.append(("helper_call", 0.5))
+        if scalar_fp:
+            table += [("fma", 1.2), ("fp_libcall", 0.6)]
+        if isinstance(self._base(t), TBool):
+            table += [("comparison", 3.0), ("logic", 1.5)]
         isa = getattr(self.ctx.config, "isa", "")
         gfx1200 = isa.startswith("gfx") and self.ctx.kx_arch_number() == 1200
         if (self.ctx.config.enable_warp and self._uniform_context()
@@ -576,7 +618,8 @@ class ExprGen:
         """Integer intrinsic call (__clz/__popc/__ffs/__brev + *ll variants);
         50% chained via XOR for a data dependency (perffuzzer pattern)."""
         t = self._base(t)
-        if self.ctx.rnd_float() < 0.2:
+        if (not getattr(self.ctx.config, "generic_baseline", False)
+                and self.ctx.rnd_float() < 0.2):
             # gpuperf extra: __byte_perm permutes two u32s by a selector.
             args = [self.kx_generate(T.u32, depth + 1),
                     self.kx_generate(T.u32, depth + 1),

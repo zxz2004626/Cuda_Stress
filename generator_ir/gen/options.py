@@ -88,11 +88,53 @@ class KernelOpts:
     codegen: bool = False
     codegen_repeat: int = 1024
 
+    # ---- evaluation isolation ----
+    # Generate from the generic IR grammar only.  This bypasses whole-kernel
+    # templates and excludes every hand-written/PassSpec-inspired pattern.
+    generic_baseline: bool = False
+    # Generate a single requested PassSpec/template family without injecting
+    # unrelated template fragments or post-loop stress sections.  This keeps
+    # RQ1 Arm-C measurements attributable to the selected family.
+    pass_targeted_only: bool = False
+
     # ---- volatile policy ----
     allow_volatile: bool = False
 
     def __post_init__(self) -> None:
         self._configure_preset()
+        if self.generic_baseline:
+            self._configure_generic_baseline()
+        elif self.pass_targeted_only:
+            self._configure_pass_targeted_only()
+
+    def _configure_generic_baseline(self) -> None:
+        """Canonicalize knobs that could leak targeted knowledge.
+
+        The generator also enforces this policy at dispatch sites, so callers
+        cannot defeat isolation by mutating a config after construction.  The
+        canonical values here make the effective configuration explicit and
+        keep persisted manifests reproducible.
+        """
+        if self.codegen:
+            raise ValueError("generic_baseline cannot be combined with codegen/weave mode")
+        self.do_bank_stress = False
+        self.reg_pressure_level = "none"
+        self.do_vector_stress = False
+        self.do_switch_stress = False
+        self.do_barrier_stress = False
+        self.prob_u64_divmod = 0.0
+        self.prob_divergent_switch = 0.0
+        self.prob_strided_unroll = 0.0
+        self.prob_runtime_loop_bound = 0.0
+        self.prob_wide_consts = 0.0
+
+    def _configure_pass_targeted_only(self) -> None:
+        """Disable auxiliary targeted stressors for clean Arm-C attribution."""
+        self.do_bank_stress = False
+        self.reg_pressure_level = "none"
+        self.do_vector_stress = False
+        self.do_switch_stress = False
+        self.do_barrier_stress = False
 
     def _configure_preset(self) -> None:
         """Adjust budgets per complexity level (monotonic: low ≤ med ≤ high)."""

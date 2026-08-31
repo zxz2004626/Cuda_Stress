@@ -98,7 +98,8 @@ class CudaEmitter(BaseEmitter):
             w.raw(f"#include {h}")
         w.blank()
         write_safe_macros(w)
-        write_diverge_macros(w)
+        if not getattr(cfg, "generic_baseline", False):
+            write_diverge_macros(w)
         w.raw("#define GPU_CUDA_CHECK(call) do { "
           "cudaError_t _gpu_err = (call); "
           "if (_gpu_err != cudaSuccess) { "

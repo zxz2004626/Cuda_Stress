@@ -133,7 +133,8 @@ class HipEmitter(CudaEmitter):
             w.raw(f"#include {mapped}")
         w.blank()
         write_safe_macros(w)
-        write_diverge_macros(w)
+        if not getattr(cfg, "generic_baseline", False):
+            write_diverge_macros(w)
         w.raw("#define GPU_HIP_CHECK(call) do { "
           "hipError_t _gpu_err = (call); "
           "if (_gpu_err != hipSuccess) { "

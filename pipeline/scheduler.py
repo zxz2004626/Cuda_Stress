@@ -231,6 +231,10 @@ class LoopScheduler:
                        r: random.Random) -> Dict[str, Any]:
         p = dict(params)
         if strategy_name == "generator_ir":
+            if bool(p.get("generic_baseline", False)):
+                # Preserve the experimental arm: scheduler-side stress-knob
+                # mutation would otherwise reintroduce targeted bias.
+                return p
             # generator_ir has no fixed ABI; diversify by bumping stress knobs.
             # Bump the repeat count / scalar fan-in, and occasionally enable
             # the FP-pool / wide-constant paths (well-defined; observable_fold

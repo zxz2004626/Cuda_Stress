@@ -56,6 +56,8 @@ def kx_build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--observable-fold", action="store_true")
     gen.add_argument("--allow-volatile", action="store_true")
     gen.add_argument("--codegen", action="store_true")
+    gen.add_argument("--generic-baseline", action="store_true",
+                     help="template-free generic grammar (isolated evaluation baseline)")
     gen.add_argument("--enable-feature-gens", action="store_true")
     gen.add_argument("--vary-launch", action="store_true")
 
@@ -98,6 +100,8 @@ def kx_build_parser() -> argparse.ArgumentParser:
     fuzz.add_argument("--observable-fold", action="store_true")
     fuzz.add_argument("--allow-volatile", action="store_true")
     fuzz.add_argument("--codegen", action="store_true")
+    fuzz.add_argument("--generic-baseline", action="store_true",
+                      help="fresh template-free cases; mutations/corpus are disabled")
     fuzz.add_argument("--enable-feature-gens", action="store_true")
     fuzz.add_argument("--vary-launch", action="store_true")
     fuzz.add_argument("--stop-on-failure", action="store_true")

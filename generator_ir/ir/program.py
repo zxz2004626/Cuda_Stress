@@ -29,6 +29,8 @@ class LaunchConfig:
     # ---- generation metadata (used when re-entering mutation) ----
     observable_fold: bool = False
     codegen: bool = False
+    generic_baseline: bool = False
+    generation_features: Set[str] = field(default_factory=set)
     complexity: str = "medium"
     input_size_mult: int = 1
     input_dist: str = "hash"

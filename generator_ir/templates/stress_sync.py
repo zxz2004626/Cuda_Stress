@@ -139,7 +139,7 @@ class BankConflictTemplate(_SharedTemplate):
         # Snapshot the shared pool BEFORE declaring template scratch so the
         # flat result sink combines with the generated pool, never with the
         # template's own lane/warp/mix temporaries.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         name, smem, decl = self._declare_shared(ctx, "bc_smem",
                                                 bs * self._passes)
 
@@ -248,7 +248,7 @@ class BarrierPressureTemplate(_SharedTemplate):
         flat = self.kx_flat_mode(ctx)
         # Snapshot the pre-template pool so the flat sink combines with the
         # generated pool rather than the template's own live_*/mix chain.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         name, smem, decl = self._declare_shared(ctx, "bp_smem", bs)
         lane = _tid()
         bs_c = Lit(T.u32, value=bs)
@@ -461,7 +461,7 @@ class SwitchDivergenceTemplate(_SharedTemplate):
         # Snapshot the pool BEFORE declaring scratch/accumulators so the flat
         # sink combines with the generated pool, not the template's own
         # seed/bias/acc state.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         name, smem, decl = self._declare_shared(ctx, "sd_smem", bs)
         lane = _tid()
 
@@ -582,7 +582,7 @@ class GatherScatterTemplate(_SharedTemplate):
         flat = self.kx_flat_mode(ctx)
         # Snapshot the pre-template pool so the flat sink combines with the
         # generated pool rather than the gather/scatter temporaries.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         name, smem, decl = self._declare_shared(ctx, "gs_smem", bs)
         lane = _tid()
 
@@ -698,7 +698,7 @@ class WarpCommFallbackTemplate(_SharedTemplate):
         flat = self.kx_flat_mode(ctx)
         # Snapshot the pre-template pool so the flat sink combines with the
         # generated pool rather than the communication temporaries.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         name, smem, decl = self._declare_shared(ctx, "wc_smem", bs)
         lane = _tid()
         c32 = Lit(T.u32, value=32)
@@ -820,7 +820,7 @@ class PermutationCommTemplate(_SharedTemplate):
         flat = self.kx_flat_mode(ctx)
         # Snapshot the pre-template pool so the flat sink combines with the
         # generated pool rather than the template's own round temporaries.
-        pool_snapshot = ctx.kx_scope.declared_names() if flat else None
+        pool_snapshot = ctx.kx_visible_declared_names() if flat else None
         _, perm1, perm1_decl = self._declare_shared(ctx, "pc_perm1", bs)
         _, perm2, perm2_decl = self._declare_shared(ctx, "pc_perm2", bs)
         _, comm, comm_decl = self._declare_shared(ctx, "pc_comm", bs)

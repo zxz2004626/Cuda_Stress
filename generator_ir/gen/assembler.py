@@ -39,7 +39,7 @@ from generator_ir.gen.options import GenConfig
 from generator_ir.gen.context import GenContext
 from generator_ir.gen.expr_builder import ExprGen
 from generator_ir.gen.stmt_builder import StmtGen
-from generator_ir.templates.skeleton import KernelTemplate
+from generator_ir.templates.skeleton import KernelTemplate, GenericKernelScaffold
 from generator_ir.templates.catalog import TemplateRegistry, kx_build_default_registry
 
 
@@ -49,7 +49,14 @@ class KernelGenerator:
     def __init__(self, config: GenConfig,
                  registry: Optional[TemplateRegistry] = None) -> None:
         self.config = config
-        self.registry = registry or kx_build_default_registry()
+        # Keep the registry lazy: a generic-baseline run must not even select
+        # or instantiate the targeted template catalog.
+        self.registry = registry
+
+    def _get_registry(self) -> TemplateRegistry:
+        if self.registry is None:
+            self.registry = kx_build_default_registry()
+        return self.registry
 
     # ------------------------------------------------------------------
     # top-level
@@ -58,13 +65,20 @@ class KernelGenerator:
     def kx_generate(self, template_name: Optional[str] = None) -> Program:
         ctx = GenContext(self.config)
 
-        if template_name is not None:
-            template = self.registry.get(template_name)
+        if getattr(self.config, "generic_baseline", False):
+            if template_name is not None:
+                raise ValueError("generic_baseline does not accept a template")
+            template = GenericKernelScaffold(self.config.element_count)
+            ctx.features_used.add("generic_baseline")
+        elif template_name is not None:
+            registry = self._get_registry()
+            template = registry.get(template_name)
             if template is None:
                 raise ValueError(f"unknown template {template_name!r}; "
-                                 f"have {self.registry.kx_all_names()}")
+                                 f"have {registry.kx_all_names()}")
         else:
-            template = self.registry.kx_weighted_random(ctx.rng, schedule=ctx.weights)
+            template = self._get_registry().kx_weighted_random(
+                ctx.rng, schedule=ctx.weights)
 
         ctx.kx_is_2d = template.kx_is_2d() or template.uses_non_tid_output()
 
@@ -103,11 +117,14 @@ class KernelGenerator:
             observable_fold=self.config.observable_fold,
             complexity=self.config.complexity,
             input_size_mult=(self.config.strided_unroll_depth
-                             if (self.config.observable_fold and not ctx.kx_is_2d) else 1),
+                             if (self.config.observable_fold and not ctx.kx_is_2d
+                                 and not getattr(self.config, "generic_baseline", False))
+                             else 1),
             arch=self.config.isa,
             allow_volatile=self.config.allow_volatile,
             input_dist=getattr(self.config, "input_dist", "hash"),
             codegen=self.config.codegen,
+            generic_baseline=getattr(self.config, "generic_baseline", False),
             checksum_only=self.config.checksum_only,
         )
 
@@ -123,9 +140,11 @@ class KernelGenerator:
         # __launch_bounds__ must cover the actual block size.
         actual = block[0] * block[1] * block[2]
         choices = [t for t in (256, 384, 512, 768, 1024) if t >= actual] or [1024]
-        kernel.launch_bounds = (ctx.rnd_choice(choices), ctx.rnd_choice([1, 2]))
+        if not getattr(self.config, "generic_baseline", False):
+            kernel.launch_bounds = (ctx.rnd_choice(choices), ctx.rnd_choice([1, 2]))
 
-        if ctx.config.target == "cuda":
+        if (ctx.config.target == "cuda"
+                and not getattr(self.config, "generic_baseline", False)):
             if (ctx.kx_arch_number() >= 90 and grid[0] % 2 == 0
                     and actual <= 512 and ctx.rnd_bool(0.35)):
                 kernel.cluster_dims = (2, 1, 1)
@@ -140,6 +159,7 @@ class KernelGenerator:
             launch.extra_headers.add("<cuda/barrier>")
         if getattr(ctx, "_needs_constant_mem", False):
             launch.needs_constant_mem = True
+        launch.generation_features = set(ctx.features_used)
 
         program = Program(launch)
         for d in arr_decls:
@@ -152,6 +172,14 @@ class KernelGenerator:
     def _randomize_stress(self, ctx: GenContext) -> None:
         """Draw post-loop stress sections per complexity."""
         c = self.config
+        if (getattr(c, "generic_baseline", False)
+                or getattr(c, "pass_targeted_only", False)):
+            c.do_bank_stress = False
+            c.reg_pressure_level = "none"
+            c.do_vector_stress = False
+            c.do_switch_stress = False
+            c.do_barrier_stress = False
+            return
         if c.complexity == "medium":
             c.do_bank_stress = ctx.rnd_bool(0.40)
             c.reg_pressure_level = ctx.rnd_choice(
@@ -253,8 +281,9 @@ class KernelGenerator:
                 ret_expr = acc
             body_stmts.append(Return(value=ret_expr))
 
-            inline_hint = ctx.rnd_choice(
-                [None, "__forceinline__", "__noinline__", None])
+            inline_hint = (None if getattr(ctx.config, "generic_baseline", False)
+                           else ctx.rnd_choice(
+                               [None, "__forceinline__", "__noinline__", None]))
             helpers.append(Func(
                 name=f"helper_{i}", params=params, ret=T.u32,
                 body=Block(body_stmts), quals=[Qual.DEVICE],
@@ -321,7 +350,9 @@ class KernelGenerator:
         ctx.kx_declare(tid_var, divergent=True)
 
         # Optional compiler memory barrier (L2 interaction probe).
-        if ctx.rnd_bool(0.10):
+        if (not getattr(self.config, "generic_baseline", False)
+                and not getattr(self.config, "pass_targeted_only", False)
+                and ctx.rnd_bool(0.10)):
             ctx.features_used.add("l2_cache_barrier")
             stmts.append(RawCode(text='asm volatile("" ::: "memory");'))
 
@@ -364,12 +395,19 @@ class KernelGenerator:
             loop_body_extra.append(s)
 
         # -- template body ---------------------------------------------------
-        if (self.config.observable_fold and not ctx.kx_is_2d
+        saved_visible = ctx._visible_names
+        ctx._visible_names = set(hoistable)
+        if (not getattr(self.config, "generic_baseline", False)
+                and self.config.observable_fold and not ctx.kx_is_2d
                 and ctx.rnd_bool(0.25)):
             template_body: List[Stmt] = []
             ctx.features_used.add("no_prologue_template")
         else:
-            template_body = list(template.build_body(ctx))
+            try:
+                template_body = list(template.build_body(ctx))
+            finally:
+                ctx._visible_names = saved_visible
+        ctx._visible_names = saved_visible
         template_body.extend(loop_body_extra)
 
         n_u = Cast(u32, to=u32, arg=n_var)
@@ -445,12 +483,14 @@ class KernelGenerator:
                 If(cond=RelOp(T.boolean, op=Cmp.LT, lhs=tid_var, rhs=n_u),
                    then=Block([Assign(Subscript(u32, array=output_var, index=tid_var),
                                       Lit(u32, value=0))])),
-                Barrier(),
             ]
+            if not getattr(self.config, "generic_baseline", False):
+                reset_stmts.append(Barrier())
 
         # Barrier-pressure block between template and filler (1D, non-fold).
         barrier_stmts: List[Stmt] = []
-        if (not ctx.kx_is_2d and not self.config.observable_fold
+        if (not getattr(self.config, "generic_baseline", False)
+                and not ctx.kx_is_2d and not self.config.observable_fold
                 and ctx.rnd_bool(0.35)):
             barrier_stmts = self._kx_build_barrier_pressure(
                 ctx, ExprGen(ctx), output_var, tid_var, n_var)
@@ -616,6 +656,8 @@ class KernelGenerator:
 
     def _build_stress_sections(self, ctx: GenContext, tid_var: Var) -> List[Stmt]:
         """Post-loop stress sections (delegates to kernel_stress module)."""
+        if getattr(self.config, "generic_baseline", False):
+            return []
         from generator_ir.gen.kernel_stress import (
             BANK_CONFLICT_BLOCK, REG_PRESSURE_BLOCK, VECTORIZE_BLOCK,
             SWITCH_DIVERGENCE_BLOCK, BARRIER_SPAN_BLOCK, fp_island_block,
@@ -648,9 +690,15 @@ class KernelGenerator:
             out.append(RawCode(text=fp_island_block(rounds, trans)))
         return out
 def build_kernel(config: GenConfig,
-                    template_name: Optional[str] = None) -> Program:
+                    template_name: Optional[str] = None,
+                    registry: Optional[TemplateRegistry] = None) -> Program:
     """Generate a program; routes to the weaving path when config.codegen."""
+    if (getattr(config, "generic_baseline", False)
+            and getattr(config, "codegen", False)):
+        raise ValueError("generic_baseline cannot be combined with codegen/weave mode")
+    if registry is not None and getattr(config, "codegen", False):
+        raise ValueError("custom template registries are not supported in codegen/weave mode")
     if getattr(config, "codegen", False):
         from generator_ir.gen.weaver import generate_weave_kernel
         return generate_weave_kernel(config, template_name)
-    return KernelGenerator(config).kx_generate(template_name)
+    return KernelGenerator(config, registry=registry).kx_generate(template_name)
