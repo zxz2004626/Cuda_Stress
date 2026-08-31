@@ -1,0 +1,29 @@
+id: miscompile-all-cicc-dropaddend0
+title: cicc drops a nonzero addend via bogus zero propagation (a + ~b - c lowered as a + (c^~9) with b assumed 0)
+class: miscompile
+component: cicc/NVVM front-end optimizer (not ptxas)
+trigger_opt: [O0, O1, O2]
+correct_value: "15181709146300232064"
+buggy_value: "13004433893898885072"
+arch_verified: sm_86
+range_sm86:
+  introduced: "<=12.5"
+  last_bad: "12.5"
+  fixed_in: "12.6"
+  note: wrong at every -Xptxas level (bug is in the front-end PTX); nvcc -G on 12.5 is correct; 12.6..13.3 correct.
+root_cause: |
+  cicc lowers `v_b + ~v_a - ((v_b<<2) ^ 9)` to `v_b + ((v_b<<2) ^ -10)`,
+  i.e. it folds `xor 9; not` into `xor ~9` AND drops the `~v_a` addend,
+  implicitly assuming v_a == 0. v_a is selp(%r44, 2039404531, %p), a
+  runtime value that is nonzero on the executed path. Bogus zero/constant
+  propagation in the 12.5 NVVM optimizer.
+original_case_id: generator_ir__0948c44ea19f0120
+original_source: runs/run-20260829-011020-1bbc/differentials/generator_ir__0948c44ea19f0120/test.cu
+reduction_note: |
+  The generator_ir IR-level reducer output (reductions/generator_ir__0948c44ea19f0120_ir_reduced)
+  is NOT faithful: it shrank helper_1 to an empty non-void body (fall-off-end UB),
+  and the reduced divergence came from front ends folding that UB differently.
+  This PoC uses a source-level greedy reduction of the ORIGINAL case that
+  preserves the true dropped-addend mechanism (verified by normalized PTX diff).
+unverifiable_versions: [11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 12.0, 12.1, 12.2, 12.3, 12.4]
+last_verified: "2026-08-31"

@@ -169,7 +169,7 @@ class ReductionTemplate(KernelTemplate):
         flat = self.kx_flat_mode(ctx)
         if flat:
             # Unconditional shared write keeps the barrier uniform.
-            pool_snapshot = ctx.kx_scope.declared_names()
+            pool_snapshot = ctx.kx_visible_declared_names()
             load_idx = SafeBin(T.u32, op=SafeOp.SMOD, lhs=tid, rhs=n_u)
             load = BinOp(T.u32, op=Arith.BXOR,
                          lhs=Subscript(T.u32, array=input_var, index=load_idx),
@@ -398,7 +398,7 @@ class StencilTemplate(KernelTemplate):
 
         # Sample the result sink only from variables that existed before this
         # template (never its own scratch).
-        pool_snapshot = ctx.kx_scope.declared_names()
+        pool_snapshot = ctx.kx_visible_declared_names()
 
         def bounded_fetch(idx_expr: Expr) -> Expr:
             return Subscript(T.u32, array=input_var,

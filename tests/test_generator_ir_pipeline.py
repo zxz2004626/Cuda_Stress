@@ -61,15 +61,16 @@ def test_generator_ir_emits_reproducible_checksum_only_program():
     assert reproduced.source == first.source
 
 
-def test_generator_backend_selection_preserves_builtin_default():
+def test_generator_backend_selection_uses_only_generator_ir():
     cfg = load_config()
     registry = default_registry()
-    builtin = _selected_strategies(cfg, registry, [], "builtin")
-    assert "generator_ir" not in builtin
+    assert registry.names() == ["generator_ir"]
+    # The old backend modes now all collapse to the only registered generator.
+    assert _selected_strategies(cfg, registry, [], "builtin") == ["generator_ir"]
     assert _selected_strategies(cfg, registry, [], "generator_ir") == ["generator_ir"]
-    mixed = _selected_strategies(cfg, registry, [], "mixed")
-    assert "generator_ir" in mixed
-    assert set(builtin).issubset(mixed)
+    assert _selected_strategies(cfg, registry, [], "mixed") == ["generator_ir"]
+    with pytest.raises(ValueError):
+        _selected_strategies(cfg, registry, ["predicate_pressure"], "generator_ir")
 
 
 def test_generator_ir_codegen_repeat_is_effective_and_canonical():

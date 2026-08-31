@@ -134,7 +134,7 @@ class RegisterPressureTemplate(_SharedTemplate):
 
         # Sample the result sink only from variables that existed before this
         # template (never its own rp* scratch).
-        pool_snapshot = ctx.kx_scope.declared_names()
+        pool_snapshot = ctx.kx_visible_declared_names()
 
         stmts: List[Stmt] = []
         smem = None
@@ -438,7 +438,7 @@ class VectorizationStressTemplate(_SharedTemplate):
 
         # Sample the result sink only from variables that existed before this
         # template (never its own vs_*/v*/hv*/he*/pre* scratch).
-        pool_snapshot = ctx.kx_scope.declared_names()
+        pool_snapshot = ctx.kx_visible_declared_names()
 
         stmts: List[Stmt] = []
         _, smem, decl = self._declare_shared(ctx, "vs_smem", bs * 4)
@@ -716,7 +716,7 @@ class PTXStressTemplate(_SharedTemplate):
 
         # Sample the result sink only from variables that existed before this
         # template (never its own ptx_acc/wm_*/bo_*/... scratch).
-        pool_snapshot = ctx.kx_scope.declared_names()
+        pool_snapshot = ctx.kx_visible_declared_names()
 
         stmts: List[Stmt] = []
         acc = self._seed_acc(ctx, stmts, tid, n_u, input_var)

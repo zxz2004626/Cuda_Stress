@@ -131,6 +131,18 @@ class GenContext:
         return [v for v in self._scope.kx_all_variables()
                 if v.name in self._function_scope_names]
 
+    def kx_visible_declared_names(self) -> Set[str]:
+        """Names declared in kx_scope and visible at the current emit point.
+
+        During generation we sometimes register variables before their
+        statements are emitted.  ``_visible_names`` narrows sampling to names
+        whose declarations will appear before the current fragment.
+        """
+        names = self._scope.declared_names()
+        if self._visible_names is None:
+            return names
+        return names & self._visible_names
+
     # -- variable sampling ----------------------------------------------------
 
     def kx_sample_or_create(self, gtype: GType, for_write: bool = False,

@@ -23,21 +23,56 @@ from typing import Any, Dict, List, Optional
 from .config import Config, Toolchain, isolated_env
 
 def _probe_source() -> str:
-    """A stress kernel strong enough to expose O0/O1/O2/O3 SASS differences.
+    """A fixed-ABI stress kernel for toolchain/GPU probing.
 
-    Generated with the predicate_pressure strategy (deterministic), so the probe
-    exercises real compiler pressure instead of a trivial kernel that collapses
-    optimization levels.
+    The original generator strategies are gone, but ptxas/driver probing still
+    needs a deterministic ``test_kernel`` with the legacy fixed ABI.  This
+    static kernel is complex enough (loop, branches, GPR chain and two outputs
+    per thread) to keep O0/O1/O2 SASS levels distinguishable.
     """
-    from generator.base import default_registry
-    strat = default_registry().get("predicate_pressure")
-    case = strat.generate(
-        config_seed=0x50524F4245,  # "PROBE"
-        test_seed=0xC0FFEE,
-        params={"num_comparisons": 64, "chain_len": 120, "num_diamonds": 24,
-                "num_folds": 48, "dup_groups": 6, "use_launch_bounds": False},
-        gen_version="1.0.0", target_sm="sm_75")
-    return case.source
+    return r"""
+static __device__ __forceinline__ unsigned long long probe_mix(unsigned long long x)
+{
+    x ^= x >> 30;
+    x *= 0xbf58476d1ce4e5b9ULL;
+    x ^= x >> 27;
+    x *= 0x94d049bb133111ebULL;
+    x ^= x >> 31;
+    return x;
+}
+
+extern "C" __global__ void test_kernel(
+    const unsigned long long* __restrict__ input,
+    unsigned long long* __restrict__ output,
+    unsigned int input_words,
+    unsigned long long seed)
+{
+    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int n = input_words ? input_words : 1u;
+    unsigned long long acc = seed ^ input[tid % n] ^ (0x9e3779b97f4a7c15ULL * (unsigned long long)(tid + 1u));
+
+    #pragma unroll 4
+    for (int i = 0; i < 16; ++i)
+    {
+        unsigned long long v = input[(tid + (unsigned int)i) % n];
+        acc ^= probe_mix(v ^ (acc >> 1) ^ ((unsigned long long)i << 32));
+        acc = (acc << 7) | (acc >> 57);
+        acc ^= acc >> 17;
+    }
+
+    if (acc & 1ULL)
+    {
+        acc ^= 0xa5a5a5a5a5a5a5a5ULL;
+    }
+    else
+    {
+        acc = ~acc;
+    }
+
+    output[tid * 2u] = acc;
+    output[tid * 2u + 1u] = acc ^ seed;
+}
+"""
 
 
 PROBE_KERNEL = _probe_source()

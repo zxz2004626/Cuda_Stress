@@ -25,7 +25,6 @@ from .models import CaseResult, Category, Status
 from .queue import TaskQueue
 from . import archive, comparator, compiler, executor, oracle as oracle_mod, stress_metrics
 from generator.base import GeneratedCase, default_registry
-from generator.rng import rng_for
 
 
 _PTX_LOCKS: Dict[str, threading.Lock] = {}
@@ -157,24 +156,15 @@ class LoopScheduler:
             "test_counter": self._counter,
             "stats": self.stats.to_dict(),
             "seen_case_ids": sorted(self._case_seen)[-5000:],
-            "generation_mode": self.cfg.generation.get("generator", "builtin"),
+            "generation_mode": self.cfg.generation.get("generator", "generator_ir"),
         }
         self.queue.write_state(state)
 
     # ------------------------------------------------------------------ generation
     def _generation_strategy_names(self) -> List[str]:
-        mode = str(self.cfg.generation.get("generator", "builtin"))
-        enabled = [
-            name for name in self.registry.names()
-            if bool(self.cfg.strategies.get(name, {}).get("enabled", True))
-        ]
-        if mode == "generator_ir":
-            return ["generator_ir"]
-        if mode == "builtin":
-            return [name for name in enabled if name != "generator_ir"]
-        if mode == "mixed":
-            return list(dict.fromkeys(enabled + ["generator_ir"]))
-        raise ValueError(f"unknown generation.generator mode {mode!r}")
+        # The original fixed-ABI generator strategies have been removed; only
+        # generator_ir is registered and generated.
+        return ["generator_ir"]
 
     def _target_sm(self) -> str:
         configured = self.cfg.generation.get("target_sm")
@@ -245,21 +235,6 @@ class LoopScheduler:
                 if r.random() < 0.4:
                     p[key] = r.choice([0.25, 0.5, 0.75])
             return p
-        numeric_keys = {
-            "predicate_pressure": ["num_comparisons", "chain_len", "num_diamonds", "dup_groups"],
-            "integer_chain": ["chain_len"],
-            "memory_address": ["reads"],
-            "warp_mixed": ["chain_len"],
-            "register_pressure": ["live_vars", "chains", "merge_len"],
-            "inline_ptx": ["n_instr", "n_regs32", "n_regs64", "n_preds"],
-        }.get(strategy_name, [])
-        if numeric_keys:
-            key = r.choice(numeric_keys)
-            factor = r.choice([0.6, 0.8, 1.2, 1.5])
-            try:
-                p[key] = max(1, int(p[key] * factor))
-            except (KeyError, TypeError):
-                pass
         return p
 
     def _generate_batch(self) -> None:
@@ -490,7 +465,7 @@ class LoopScheduler:
         archive.init_run(self.run_dir, self.cfg)
         self.queue.write_run_id(self.run_dir.name)
         print(f"[loop] run_id={self.run_dir.name}  seed={self.config_seed}  "
-              f"generator={self.cfg.generation.get('generator', 'builtin')}  "
+              f"generator={self.cfg.generation.get('generator', 'generator_ir')}  "
               f"devices={self.devices}  profiles={[p.name for p in self.cfg.profiles]}  "
               f"toolchains={[t.id for t in self.cfg.toolchains]}")
 

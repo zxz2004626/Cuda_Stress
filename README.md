@@ -18,12 +18,38 @@ Generator → stress-gate → N×M compile → PTX/SASS metrics → GPU run ×3
          → mutate & generate next batch   (continuous, resumable loop)
 ```
 
-Two generation backends feed that same queue/comparison/archive pipeline:
-the original fixed-ABI strategies (default), and the optional `generator_ir`
-backend, which emits complete CUDA Runtime programs and compares a deterministic
-u64 checksum across builds.
+Only one generation backend feeds the queue/comparison/archive pipeline:
+`generator_ir`, which emits complete CUDA Runtime programs and compares a
+deterministic u64 checksum across builds.  The original fixed-ABI generator
+strategies (predicate_pressure, integer_chain, memory_address, warp_mixed,
+register_pressure, inline_ptx) have been removed from the generation path.
 
 ---
+
+## HIP / ROCm port (AMD differential testing)
+
+The original builtin strategies emit CUDA/PTX-specific code (inline PTX asm,
+`__byte_perm`, `ptxas` flags, ...), so the AMD port uses the repository's
+`generator_ir` HIP backend instead: `hip_stress.py` generates self-contained
+`.hip` test programs and compiles each one with every configured `hipcc`
+version at every optimization profile, then compares the deterministic
+`checksum=` lines emitted by the built-in harness.
+
+On the AMD host (`shuaipc1`) three isolated ROCm installs are used:
+
+```bash
+cd Cuda_Stress_hip
+python3 hip_stress.py doctor
+python3 hip_stress.py generate --seed 1 --count 8 --out corpus_hip
+python3 hip_stress.py run --corpus corpus_hip --runs 3
+python3 hip_stress.py loop --seed 1 --seeds 50 --complexity medium --runs 3
+```
+
+Configuration lives in `config/hip_toolchains.yaml`.  The host's distro only
+provides `libxml2.so.16`, while ROCm's `lld` links against `libxml2.so.2`; the
+script creates a small user-owned shim symlink automatically (configured by
+`libxml2_dir` / `libxml2_source`).
+
 
 ## Requirements
 
@@ -42,29 +68,24 @@ make -C native
 # 2. Sanity-check toolchains, GPU and the real ptxas -O0..-O4 landscape
 python3 pipeline.py doctor --force
 
-# 3. Generate a batch of deterministic testcases into corpus/accepted
-python3 -m cuda_stress generate --strategy integer_chain \
-        --strategy predicate_pressure --count 4 --test-seed 100
-
-# Optional: generate one IR-based standalone/checksum testcase
-python3 -m cuda_stress generate --generator generator_ir --count 1 --test-seed 100
+# 3. Generate a batch of deterministic generator_ir testcases into corpus/accepted
+python3 -m cuda_stress generate --count 4 --test-seed 100
+python3 -m cuda_stress generate --strategy generator_ir --count 1 --test-seed 100
 
 # 4. Compile + run one case's full matrix (all toolchains × all ptxas profiles × 3 runs)
-python3 -m cuda_stress run --test corpus/accepted/integer_chain__<id> --runs 3
-python3 -m cuda_stress compare --test corpus/accepted/integer_chain__<id>
+python3 -m cuda_stress run --test corpus/accepted/generator_ir__<id> --runs 3
+python3 -m cuda_stress compare --test corpus/accepted/generator_ir__<id>
 
 # 5. Continuous, resumable differential-testing loop
 python3 pipeline.py loop --max-cases 100          # finite run for regression
 python3 pipeline.py loop --duration 24h           # long unattended run
-python3 pipeline.py loop --generator generator_ir --max-cases 100
-python3 pipeline.py loop --generator mixed --max-cases 100
 python3 pipeline.py status                        # queue / run state
 python3 pipeline.py resume                        # continue an interrupted loop
 python3 pipeline.py report --run <run_id>         # summarize a run
 python3 pipeline.py gc                            # enforce disk budget now
 
 # 6. Regenerate any case byte-for-byte from its manifest
-python3 -m cuda_stress reproduce --id integer_chain__<id> --out /tmp/repro
+python3 -m cuda_stress reproduce --id generator_ir__<id> --out /tmp/repro
 
 # 7. Tests (unit + GPU smoke)
 python3 -m pytest tests/ -v

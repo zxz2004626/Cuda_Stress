@@ -77,7 +77,9 @@ class StmtGen:
         return isa.startswith("gfx") and self.ctx.kx_arch_number() == 1200
 
     def _kx_risky_patterns_enabled(self) -> bool:
-        return not self._is_gfx1200()
+        return (not getattr(self.ctx.config, "generic_baseline", False)
+                and not getattr(self.ctx.config, "pass_targeted_only", False)
+                and not self._is_gfx1200())
 
     # -- verbatim-pattern text helpers ------------------------------------
 
@@ -171,6 +173,19 @@ class StmtGen:
                 ("fence", 3.0), ("pragma", 4.0), ("emi_guard", 4.0),
                 ("intrinsic", 3.0),
             ]
+        if getattr(cfg, "generic_baseline", False):
+            # Positive allow-list: target-specific kinds appended below (and
+            # any added in the future) cannot enter the baseline implicitly.
+            generic_allowed = {
+                "assign", "vardecl", "if", "for", "while", "do_while",
+                "switch", "compound", "incr_decr", "expr_stmt", "atomic",
+                "sync", "intrinsic",
+            }
+            table = [(k, w) for k, w in table if k in generic_allowed]
+            if (cfg.enable_smem and self._kx_in_safe_context()
+                    and not self.ctx.in_device_helper):
+                table.append(("generic_shared", 4.0))
+            return self._gate_generic_table(table, depth)
         # Context gating (depth ceilings, barrier legality, feature toggles).
         if depth >= cfg.nesting_branch_cap:
             table = [(k, w) for k, w in table if k not in ("if", "switch")]
@@ -232,9 +247,26 @@ class StmtGen:
         # Fuzzilli-style template fusion: splice a 1D template body as a
         # composable fragment at this program point (fold mode only).
         if (getattr(cfg, "observable_fold", False) and not self.ctx.kx_is_2d
+                and not getattr(cfg, "pass_targeted_only", False)
                 and not getattr(self.ctx, "_in_template_fragment", False)
                 and self._kx_in_safe_context()):
             table.append(("template", 4.0))
+        return table
+
+    def _gate_generic_table(self, table, depth: int):
+        """Apply ordinary legality gates to the generic statement allow-list."""
+        cfg = self.ctx.config
+        if depth >= cfg.nesting_branch_cap:
+            table = [(k, w) for k, w in table if k not in ("if", "switch")]
+        if depth >= cfg.nesting_loop_cap or not self._loop_budget_ok():
+            table = [(k, w) for k, w in table
+                     if k not in ("for", "while", "do_while", "pragma")]
+        if not self._sync_legal():
+            table = [(k, w) for k, w in table if k != "sync"]
+        if not (cfg.enable_atomics and not self.ctx.kx_is_2d
+                and not self.ctx.in_device_helper
+                and {"tid", "output", "n"} <= self.ctx.kx_scope.declared_names()):
+            table = [(k, w) for k, w in table if k != "atomic"]
         return table
 
     def _draw_stmt(self, depth: int) -> Optional[Stmt]:
@@ -260,6 +292,7 @@ class StmtGen:
             "pragma": lambda: self._pragma(depth),
             "emi_guard": lambda: self._emi_guard(depth),
             "intrinsic": self._intrinsic_stmt,
+            "generic_shared": self._generic_shared,
             "sync_predicate": self._sync_predicate,
             "dynamic_shared": self._dynamic_shared,
             "coop_groups": self._coop_groups,
@@ -501,6 +534,31 @@ class StmtGen:
             if self.ctx.rnd_bool(0.35):
                 return self._shared_sync_pattern()
         return Barrier()
+
+    def _generic_shared(self) -> List[Stmt]:
+        """An independent shared-memory primitive with no barrier relation.
+
+        Each thread owns ``threadIdx.x`` in a 1024-element array, writes it,
+        and immediately reads the same slot.  The construct exercises shared
+        address-space syntax without encoding a bank, communication, or
+        synchronization trigger pattern.
+        """
+        size = 1024
+        name = self.ctx.kx_fresh_name("_gsh")
+        value_name = self.ctx.kx_fresh_name("_gshv")
+        at = TArray(T.u32, size)
+        lane = ThreadBuiltin(T.u32, axis="x", source="threadIdx")
+        arr = Var(at, name=name)
+        slot = Subscript(T.u32, array=arr, index=lane)
+        self.ctx.kx_declare(Var(T.u32, name=value_name), divergent=True)
+        self.ctx.features_used.add("generic_shared")
+        return [
+            Declare(name=name, gtype=at, space=MemSpace.SHARED,
+                    quals=[Qual.SHARED_MEM]),
+            Assign(slot, self.expr_gen.kx_generate(T.u32, depth=1)),
+            Declare(name=value_name, gtype=T.u32,
+                    init=Subscript(T.u32, array=arr, index=lane)),
+        ]
 
     def _shared_sync_pattern(self) -> List[Stmt]:
         """Shared-memory write / barrier / read sequence (bank-conflict and

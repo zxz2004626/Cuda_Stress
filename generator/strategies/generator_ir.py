@@ -33,8 +33,9 @@ class GeneratorIR(Strategy):
         "float", "double", "half", "__half", "bfloat16", "bf16",
     }
     _KNOWN_PARAMS = {
-        "ir_seed", "template", "complexity", "observable_fold",
+        "ir_seed", "template", "template_catalog", "complexity", "observable_fold",
         "checksum_only", "amplify_iters", "codegen", "codegen_repeat",
+        "generic_baseline", "pass_targeted_only",
         "allow_volatile", "input_distribution", "randomize_launch",
         "prob_float_pool", "prob_raw_div", "prob_wide_consts",
         "scalar_param_count", "use_full_int_widths", "enable_smem",
@@ -74,9 +75,21 @@ class GeneratorIR(Strategy):
         if complexity not in self._COMPLEXITIES:
             raise ValueError(f"unsupported generator_ir complexity {complexity!r}")
 
+        generic_baseline = bool(raw.get("generic_baseline", False))
+        template_catalog = str(raw.get("template_catalog", "default") or "default")
+        catalog_key = template_catalog.strip().lower().replace("-", "_")
+        if catalog_key not in {"default", "paper", "passspec", "raw_llm", "rawllm", "arm_b", "armb"}:
+            raise ValueError(f"unsupported generator_ir template_catalog {template_catalog!r}")
+        if generic_baseline and catalog_key not in {"default", "paper", "passspec"}:
+            raise ValueError("generic_baseline cannot be combined with a custom template_catalog")
         names = sorted(str(n) for n in templates)
         requested = raw.get("template")
-        if requested in (None, "", "random"):
+        if generic_baseline:
+            if requested not in (None, "", "random", "generic_baseline"):
+                raise ValueError(
+                    "generic_baseline cannot be combined with a concrete template")
+            template = "generic_baseline"
+        elif requested in (None, "", "random"):
             # Weighted pick so PREFERENCE_TABLE (0 = never) is respected; the
             # legacy uniform `choice` ignored the table and kept re-selecting
             # templates that hang the GPU.
@@ -108,6 +121,8 @@ class GeneratorIR(Strategy):
                 raise ValueError(f"unknown generator_ir type names: {unknown_types}")
 
         codegen = bool(raw.get("codegen", False))
+        if generic_baseline and codegen:
+            raise ValueError("generic_baseline cannot be combined with codegen/weave mode")
         randomize_launch = bool(raw.get("randomize_launch", False))
         amplify_iters = max(1, int(raw.get("amplify_iters", 2)))
         codegen_repeat = max(1, int(raw.get("codegen_repeat", amplify_iters)))
@@ -135,6 +150,7 @@ class GeneratorIR(Strategy):
         normalized: Dict[str, Any] = {
             "ir_seed": ir_seed,
             "template": template,
+            "template_catalog": "raw_llm" if catalog_key in {"raw_llm", "rawllm", "arm_b", "armb"} else "default",
             "complexity": complexity,
             # observable_fold makes the emitted checksum depend on live IR
             # values and deliberately excludes address/FP-only false deltas.
@@ -143,12 +159,15 @@ class GeneratorIR(Strategy):
             "amplify_iters": amplify_iters,
             "codegen": codegen,
             "codegen_repeat": codegen_repeat,
+            "generic_baseline": generic_baseline,
+            "pass_targeted_only": bool(raw.get("pass_targeted_only", False)),
             "allow_volatile": bool(raw.get("allow_volatile", False)),
             "input_distribution": input_distribution,
             "randomize_launch": randomize_launch,
             "prob_float_pool": float(raw.get("prob_float_pool", 0.0)),
             "prob_raw_div": float(raw.get("prob_raw_div", 0.0)),
-            "prob_wide_consts": float(raw.get("prob_wide_consts", 0.0)),
+            "prob_wide_consts": (0.0 if generic_baseline else
+                                  float(raw.get("prob_wide_consts", 0.0))),
             "scalar_param_count": max(0, int(raw.get("scalar_param_count", 3))),
             "use_full_int_widths": bool(
                 raw.get("use_full_int_widths", default_full_widths)),
@@ -175,11 +194,24 @@ class GeneratorIR(Strategy):
         from generator_ir.emit.host_harness import cuda_driver_spec
         from generator_ir.gen.assembler import build_kernel
         from generator_ir.gen.options import GenConfig
-        from generator_ir.templates.catalog import kx_build_default_registry
-
-        registry = kx_build_default_registry()
+        # The generic baseline must not instantiate the template catalog.  A
+        # concrete template request is rejected by normalization below.
+        generic_requested = bool((params or {}).get("generic_baseline", False))
+        requested_catalog = str((params or {}).get("template_catalog", "default") or "default")
+        if generic_requested:
+            template_names: Iterable[str] = ()
+            build_registry = None
+        else:
+            from generator_ir.templates.catalog import kx_build_named_registry
+            registry = kx_build_named_registry(requested_catalog)
+            template_names = registry.kx_all_names()
+            build_registry = registry if requested_catalog.strip().lower().replace("-", "_") in {
+                "raw_llm", "rawllm", "arm_b", "armb",
+            } else None
         p = self._normalized_params(
-            config_seed, test_seed, params, registry.kx_all_names())
+            config_seed, test_seed, params, template_names)
+        if p["template_catalog"] == "raw_llm" and p["codegen"]:
+            raise ValueError("template_catalog=raw_llm is not compatible with codegen/weave mode")
 
         cfg = GenConfig(
             seed=p["ir_seed"],
@@ -191,6 +223,8 @@ class GeneratorIR(Strategy):
             amplify_iters=p["amplify_iters"],
             codegen=p["codegen"],
             codegen_repeat=p["codegen_repeat"],
+            generic_baseline=p["generic_baseline"],
+            pass_targeted_only=p["pass_targeted_only"],
             allow_volatile=p["allow_volatile"],
             input_distribution=p["input_distribution"],
             randomize_launch=p["randomize_launch"],
@@ -216,7 +250,11 @@ class GeneratorIR(Strategy):
         if "grid" in p:
             cfg.blocks_per_grid_dim = tuple(p["grid"])
 
-        program = build_kernel(cfg, template_name=p["template"])
+        program = build_kernel(
+            cfg,
+            template_name=None if p["generic_baseline"] else p["template"],
+            registry=build_registry,
+        )
         source = CudaEmitter().rendersrc(program)
         ir_blob = pickle.dumps(program, protocol=pickle.HIGHEST_PROTOCOL)
         kernel = program.fetch_kernel()

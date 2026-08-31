@@ -63,23 +63,18 @@ def _materialize_generated(config: Config, case: GeneratedCase, out_dir: Path) -
 
 def _selected_strategies(config: Config, reg, explicit: List[str],
                          generator_mode: Optional[str]) -> List[str]:
-    """Resolve the optional generator backend without changing legacy defaults."""
+    """Resolve the generation backend.
+
+    The original fixed-ABI generator strategies have been removed; only the
+    generator_ir backend is available.
+    """
     if explicit:
+        unknown = [s for s in explicit if s not in reg.names()]
+        if unknown:
+            raise ValueError(
+                f"unknown strategy {unknown}; available: {reg.names()}")
         return list(dict.fromkeys(explicit))
-    mode = generator_mode or str(config.generation.get("generator", "builtin"))
-    enabled = [
-        name for name in reg.names()
-        if bool(config.strategies.get(name, {}).get("enabled", True))
-    ]
-    if mode == "generator_ir":
-        return ["generator_ir"]
-    if mode == "builtin":
-        return [name for name in enabled if name != "generator_ir"]
-    if mode == "mixed":
-        # An explicit mixed selection opts into the IR backend even when its
-        # default config entry is disabled for backwards compatibility.
-        return list(dict.fromkeys(enabled + ["generator_ir"]))
-    raise ValueError(f"unknown generator mode {mode!r}")
+    return ["generator_ir"]
 
 
 def _target_sm(config: Config) -> str:
@@ -405,8 +400,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("generate", help="generate testcases")
     g.add_argument("--strategy", action="append", default=[])
-    g.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"],
-                   default=None, help="select a generation backend (strategies remain available)")
+    g.add_argument("--generator", choices=["generator_ir"],
+                   default="generator_ir", help="generation backend (generator_ir only)")
     g.add_argument("--count", default=1)
     g.add_argument("--config-seed", default=20260810)
     g.add_argument("--test-seed", default=0)
@@ -445,13 +440,13 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--duration", default=None)
     lp.add_argument("--seed", default=None)
     lp.add_argument("--resume", action="store_true")
-    lp.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"], default=None)
+    lp.add_argument("--generator", choices=["generator_ir"], default="generator_ir")
     lp.set_defaults(func=cmd_loop)
 
     rs = sub.add_parser("resume", help="resume the interrupted loop")
     rs.add_argument("--max-cases", default=0)
     rs.add_argument("--duration", default=None)
-    rs.add_argument("--generator", choices=["builtin", "generator_ir", "mixed"], default=None)
+    rs.add_argument("--generator", choices=["generator_ir"], default="generator_ir")
     rs.set_defaults(func=lambda a: cmd_loop(argparse.Namespace(
         config=a.config, toolchains=a.toolchains, strategies=a.strategies,
         max_cases=a.max_cases, duration=a.duration, seed=None, resume=True,
