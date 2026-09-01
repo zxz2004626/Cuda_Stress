@@ -23,6 +23,8 @@ ranges are copied from each case's original README and marked as such.
 | `hang-O0-threshold` | hang | O0 | 12.0..13.3 (unfixed) | 0 → over-threshold (30s) | finite stress loop (strided global loads + atomic + __syncthreads + ne |
 | `miscompile-O1plus-u16-signext0` | miscompile | O1,O2 | 11.2..13.2, fixed 13.3 | 65407 → 127 | ptxas omits the second PRMT re-sign-extension after neg.s16 |
 | `miscompile-O1plus-u16-signext1` | miscompile | O1,O2 | 11.2..13.2, fixed 13.3 | 4294967168 → 128 | Same u16 sign-extension bug as signext0 |
+| `miscompile-all-cicc-mulnarrow0` | miscompile | O0,O1,O2 | <=12.5..12.6, fixed 12.8 | 0 → 1 | cicc moves multiply across char narrowing: 3*(char)(c-129) -> 3*c+381 |
+| `miscompile-all-cicc-dropaddend0` | miscompile | O0,O1,O2 | <=12.5, fixed 12.6 | 15181709146300232064 → 13004433893898885072 | cicc drops nonzero selp addend ~v_a via bogus zero propagation |
 
 ## Notes
 
@@ -33,3 +35,14 @@ ranges are copied from each case's original README and marked as such.
 - `hang-O0-threshold`: threshold-style, **not** infinite — O0 exceeds the 30s harness
   threshold at 12.0, 12.3..12.5, 13.1..13.3; O1 mostly completes <22s.
 - `unverifiable_versions` on this host: 10.0, 10.2, 11.0 (sm_86 needs CUDA >= 11.1).
+- `miscompile-all-cicc-*`: **cicc/NVVM front-end** bugs, not ptxas — wrong at every
+  `-Xptxas` level; proven by PTX-JIT (`-arch=compute_86`, driver JIT reproduces the
+  wrong value) and by `-G` (optimizer off) being correct on the affected toolchains.
+  Sweeps covered 12.5, 12.6, 13.0..13.3 natively; mulnarrow additionally verified
+  fixed on docker 12.8.2/12.9.2 (CUDA 12.7 does not exist). `introduced` is
+  "<=12.5" for both; 11.x..12.4 not installed on this host.
+- `miscompile-all-cicc-mulnarrow0` needs the dead `__ldg(i);` statement to trigger;
+  original case: `generator_ir__350e41ea3b05302b` (run-20260829-011020-1bbc).
+- `miscompile-all-cicc-dropaddend0`: the IR-level reducer output for the original case
+  (`generator_ir__0948c44ea19f0120`) is a UB artifact (empty non-void helper_1) and is
+  NOT the mechanism in this PoC; this PoC uses a source-level reduction of the original.
