@@ -19,10 +19,15 @@ def recompute_expected(test_dir: Path) -> Dict[str, Any]:
         raise ValueError(
             f"{case.strategy} has no CPU oracle; use cross-build checksum comparison")
     strat = default_registry().get(case.strategy)
+    kwargs: Dict[str, Any] = {}
+    if case.strategy == "generator_ir":
+        # generator_ir rebuilds its program from normalized params and needs
+        # the original target SM for arch-gated intrinsics.
+        kwargs["target_sm"] = case.target_sm
     expected = strat.cpu_oracle(
         input_words=case.input_words, seed=case.kernel_seed, params=case.params,
         input_bytes=case.input_bytes, grid=case.grid, block=case.block,
-        output_words_per_thread=case.output_words_per_thread)
+        output_words_per_thread=case.output_words_per_thread, **kwargs)
     return {
         "recomputed_sha256": hashlib.sha256(expected).hexdigest(),
         "stored_sha256": hashlib.sha256(case.expected_bytes).hexdigest(),
@@ -52,6 +57,28 @@ def verify_input_sensitivity(test_dir: Path, config_seed: int) -> Dict[str, Any]
         raise ValueError(
             "cross-build cases require verify_runtime_input_sensitivity(config, test_dir)")
     strat = default_registry().get(case.strategy)
+    if case.execution_mode == "driver_checksum":
+        # generator_ir checksum cases derive their input from the recorded
+        # distribution internally; the salted-oracle rerun is the analogous
+        # CPU-side sensitivity check (the GPU side has its own input-salt run).
+        kwargs: Dict[str, Any] = {}
+        if case.strategy == "generator_ir":
+            kwargs["target_sm"] = case.target_sm
+        base = strat.cpu_oracle(
+            input_words=case.input_words, seed=case.kernel_seed,
+            params=case.params, input_bytes=case.input_bytes, grid=case.grid,
+            block=case.block, output_words_per_thread=case.output_words_per_thread,
+            input_salt=None, **kwargs)
+        salted = strat.cpu_oracle(
+            input_words=case.input_words, seed=case.kernel_seed,
+            params=case.params, input_bytes=case.input_bytes, grid=case.grid,
+            block=case.block, output_words_per_thread=case.output_words_per_thread,
+            input_salt=1, **kwargs)
+        return {
+            "input_sensitive": base != salted,
+            "base_sha256": hashlib.sha256(base).hexdigest(),
+            "salted_sha256": hashlib.sha256(salted).hexdigest(),
+        }
     # A different input, derived deterministically from the same seeds + 1.
     rng = strat._new_rng(config_seed, case.test_seed + 1)
     from generator.strategies.helpers import make_input_words, pack_words

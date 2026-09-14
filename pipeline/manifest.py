@@ -25,6 +25,11 @@ def write_testcase_dir(test_dir: Path, case: GeneratedCase, generator_version: s
     (test_dir / "test.cu").write_text(case.source)
     (test_dir / "input.bin").write_bytes(case.input_bytes)
     (test_dir / "expected.bin").write_bytes(case.expected_bytes)
+    oracle_source = getattr(case, "oracle_source", None)
+    if oracle_source:
+        # Standalone CPU oracle (generator_ir cpu_oracle mode): the C twin of
+        # test.cu whose u64 checksum is expected.bin (8 bytes LE).
+        (test_dir / "oracle_cpu.c").write_text(oracle_source)
     ir_blob = getattr(case, "ir_blob", None)
     if ir_blob is not None:
         (test_dir / "program.pkl").write_bytes(ir_blob)
@@ -123,4 +128,7 @@ def case_from_dir(test_dir: Path) -> GeneratedCase:
         execution_mode=m.get("execution_mode", "driver_kernel"),
         oracle_mode=m.get("oracle_mode", "cpu_exact"),
         execution_spec=m.get("execution_spec", {}),
+        oracle_note=m.get("cpu_oracle_note", ""),
+        oracle_source=(test_dir / "oracle_cpu.c").read_text()
+        if (test_dir / "oracle_cpu.c").exists() else None,
     )

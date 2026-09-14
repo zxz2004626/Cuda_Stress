@@ -68,8 +68,13 @@ class GeneratedCase:
     execution_spec: Dict[str, Any] = field(default_factory=dict)
     # Optional archived IR (generator_ir only).  Kept out of case_id() and
     # manifest hashes so byte-for-byte source/input/expected semantics are
-    # unchanged; reducer uses it as a fast exact-load path.
+    # unchanged; the reducer uses it as a fast exact-load path.
     ir_blob: Optional[bytes] = None
+    # CPU-oracle program source (generator_ir cpu_oracle mode).  Persisted as
+    # oracle_cpu.c next to test.cu; empty expected.bin + empty source mean the
+    # case fell back to the cross-build oracle.  Also excluded from case_id().
+    oracle_source: Optional[str] = None
+    oracle_note: str = ""
 
     # -- stable identity ----------------------------------------------------
     @property
@@ -121,6 +126,7 @@ class GeneratedCase:
             "execution_spec": self.execution_spec,
             "sanitizer_policy": self.sanitizer_policy,
             "cuda_features": self.cuda_features,
+            "cpu_oracle_note": self.oracle_note,
             "hashes": {
                 "source": f"sha256:{self.source_sha256}",
                 "input": f"sha256:{self.input_sha256}",

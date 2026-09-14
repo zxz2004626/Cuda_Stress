@@ -40,7 +40,7 @@ class GeneratorIR(Strategy):
         "prob_float_pool", "prob_raw_div", "prob_wide_consts",
         "scalar_param_count", "use_full_int_widths", "enable_smem",
         "enable_atomics", "enable_warp", "enable_barriers", "block",
-        "grid", "type_allowlist",
+        "grid", "type_allowlist", "cpu_oracle",
     }
 
     @staticmethod
@@ -175,6 +175,10 @@ class GeneratorIR(Strategy):
             "enable_atomics": bool(raw.get("enable_atomics", True)),
             "enable_warp": bool(raw.get("enable_warp", True)),
             "enable_barriers": bool(raw.get("enable_barriers", True)),
+            # Opt-in: emit + execute a CPU C oracle alongside the GPU program.
+            # Off by default so archived cross_build manifests still reproduce
+            # byte-for-byte; enable per campaign via strategy params.
+            "cpu_oracle": bool(raw.get("cpu_oracle", False)),
         }
         if block is not None:
             normalized["block"] = list(block)
@@ -184,34 +188,25 @@ class GeneratorIR(Strategy):
             normalized["type_allowlist"] = type_allowlist
         return normalized
 
-    def generate(self, config_seed: int, test_seed: int, params: Dict[str, Any],
-                 gen_version: str, target_sm: str) -> GeneratedCase:
-        if not str(target_sm).startswith("sm_"):
-            raise ValueError(f"generator_ir CUDA target must be an sm_* architecture, got {target_sm!r}")
+    @staticmethod
+    def _build_program(p: Dict[str, Any], target_sm: str):
+        """Deterministically rebuild the IR Program from normalized params.
 
-        from generator_ir import __version__ as ir_version
-        from generator_ir.emit.nvidia import CudaEmitter
-        from generator_ir.emit.host_harness import cuda_driver_spec
+        Shared by generate() and cpu_oracle() so a recompute from the
+        manifest reproduces the exact program the case was built from.
+        """
         from generator_ir.gen.assembler import build_kernel
         from generator_ir.gen.options import GenConfig
-        # The generic baseline must not instantiate the template catalog.  A
-        # concrete template request is rejected by normalization below.
-        generic_requested = bool((params or {}).get("generic_baseline", False))
-        requested_catalog = str((params or {}).get("template_catalog", "default") or "default")
+
+        generic_requested = bool(p.get("generic_baseline", False))
+        requested_catalog = str(p.get("template_catalog", "default") or "default")
         if generic_requested:
-            template_names: Iterable[str] = ()
             build_registry = None
         else:
             from generator_ir.templates.catalog import kx_build_named_registry
-            registry = kx_build_named_registry(requested_catalog)
-            template_names = registry.kx_all_names()
-            build_registry = registry if requested_catalog.strip().lower().replace("-", "_") in {
-                "raw_llm", "rawllm", "arm_b", "armb",
-            } else None
-        p = self._normalized_params(
-            config_seed, test_seed, params, template_names)
-        if p["template_catalog"] == "raw_llm" and p["codegen"]:
-            raise ValueError("template_catalog=raw_llm is not compatible with codegen/weave mode")
+            catalog_key = requested_catalog.strip().lower().replace("-", "_")
+            build_registry = kx_build_named_registry(requested_catalog) \
+                if catalog_key in {"raw_llm", "rawllm", "arm_b", "armb"} else None
 
         cfg = GenConfig(
             seed=p["ir_seed"],
@@ -249,12 +244,36 @@ class GeneratorIR(Strategy):
             cfg.threads_per_block_dim = tuple(p["block"])
         if "grid" in p:
             cfg.blocks_per_grid_dim = tuple(p["grid"])
-
-        program = build_kernel(
+        return build_kernel(
             cfg,
             template_name=None if p["generic_baseline"] else p["template"],
             registry=build_registry,
         )
+
+    def generate(self, config_seed: int, test_seed: int, params: Dict[str, Any],
+                 gen_version: str, target_sm: str) -> GeneratedCase:
+        if not str(target_sm).startswith("sm_"):
+            raise ValueError(f"generator_ir CUDA target must be an sm_* architecture, got {target_sm!r}")
+
+        from generator_ir import __version__ as ir_version
+        from generator_ir.emit.nvidia import CudaEmitter
+        from generator_ir.emit.host_harness import cuda_driver_spec
+        # The generic baseline must not instantiate the template catalog.  A
+        # concrete template request is rejected by normalization below.
+        generic_requested = bool((params or {}).get("generic_baseline", False))
+        requested_catalog = str((params or {}).get("template_catalog", "default") or "default")
+        if generic_requested:
+            template_names: Iterable[str] = ()
+        else:
+            from generator_ir.templates.catalog import kx_build_named_registry
+            registry = kx_build_named_registry(requested_catalog)
+            template_names = registry.kx_all_names()
+        p = self._normalized_params(
+            config_seed, test_seed, params, template_names)
+        if p["template_catalog"] == "raw_llm" and p["codegen"]:
+            raise ValueError("template_catalog=raw_llm is not compatible with codegen/weave mode")
+
+        program = self._build_program(p, target_sm)
         source = CudaEmitter().rendersrc(program)
         ir_blob = pickle.dumps(program, protocol=pickle.HIGHEST_PROTOCOL)
         kernel = program.fetch_kernel()
@@ -263,10 +282,44 @@ class GeneratorIR(Strategy):
         if "checksum=" not in source or "int main(" not in source:
             raise ValueError("generator_ir checksum harness was not emitted")
 
+        # ---- optional CPU C oracle (IR -> gcc-runnable C) -------------------
+        # Emits a standalone C program that replays the same deterministic
+        # checksum contract and records its u64 checksum as expected.bin.
+        # Constructs the runtime cannot mirror exactly fall back to the
+        # cross-build oracle — never to a possibly-wrong oracle.
+        oracle_source = None
+        oracle_checksum: Optional[int] = None
+        oracle_note = "disabled"
+        if p["cpu_oracle"]:
+            from generator_ir.emit.cpu_oracle import (
+                translate_cpu_oracle, run_cpu_oracle_source, CpuOracleUnsupported)
+            try:
+                oracle_source = translate_cpu_oracle(program)
+                oracle_checksum = run_cpu_oracle_source(
+                    oracle_source, timeout=self.cpu_oracle_timeout_s)
+                oracle_note = "ok"
+            except CpuOracleUnsupported as exc:
+                oracle_source, oracle_checksum = None, None
+                oracle_note = f"unsupported: {exc.reason}"
+            except Exception as exc:  # noqa: BLE001 - never claim a broken oracle
+                oracle_source, oracle_checksum = None, None
+                oracle_note = f"failed: {exc}"
+
         launch = program.launch
         execution_spec = cuda_driver_spec(program, kernel)
         suffix = f"+generator_ir-{ir_version}"
         effective_version = gen_version if "+generator_ir-" in gen_version else f"{gen_version}{suffix}"
+        if oracle_checksum is not None:
+            expected_bytes = oracle_checksum.to_bytes(8, "little")
+            oracle_mode = "cpu_emitted"
+            comparison_policy = "cpu_oracle_checksum_u64"
+        else:
+            # The Driver checksum harness derives its buffers deterministically
+            # from execution_spec. Empty artifacts preserve the common testcase
+            # directory shape without pretending a CPU oracle exists.
+            expected_bytes = b""
+            oracle_mode = "cross_build"
+            comparison_policy = "cross_build_checksum_u64"
         return GeneratedCase(
             test_id=f"generator_ir__{config_seed:x}__{test_seed:x}",
             config_seed=config_seed,
@@ -276,30 +329,52 @@ class GeneratorIR(Strategy):
             generator_version=effective_version,
             kernel_seed=p["ir_seed"],
             source=source,
-            # The Driver checksum harness derives its buffers deterministically
-            # from execution_spec. Empty artifacts preserve the common testcase
-            # directory shape without pretending a CPU oracle exists.
             input_bytes=b"",
-            expected_bytes=b"",
+            expected_bytes=expected_bytes,
             grid=list(launch.grid),
             block=list(launch.block),
             input_words=0,
             output_words=1,
             output_words_per_thread=0,
             target_sm=target_sm,
-            cpu_oracle="cross_build_consensus",
-            comparison_policy="cross_build_checksum_u64",
+            cpu_oracle="cpu_emitted_c" if oracle_checksum is not None
+            else "cross_build_consensus",
+            comparison_policy=comparison_policy,
             cuda_features=[target_sm, "generator_ir", p["template"], "driver_checksum"],
             kernel_entry=kernel.name,
             sanitizer_policy="driver_checksum_harness",
             execution_mode="driver_checksum",
-            oracle_mode="cross_build",
+            oracle_mode=oracle_mode,
             execution_spec=execution_spec,
             ir_blob=ir_blob,
+            oracle_source=oracle_source,
+            oracle_note=oracle_note,
         )
+
+    # gcc compile+run budget for one oracle evaluation during generation.
+    cpu_oracle_timeout_s = 300.0
 
     def cpu_oracle(self, input_words: int, seed: int, params: Dict[str, Any],
                    input_bytes: bytes, grid: List[int], block: List[int],
-                   output_words_per_thread: int) -> bytes:
-        raise NotImplementedError(
-            "generator_ir uses a cross-build checksum oracle, not a CPU interpreter")
+                   output_words_per_thread: int,
+                   target_sm: Optional[str] = None,
+                   input_salt: Optional[int] = None) -> bytes:
+        """Recompute the CPU-oracle checksum from manifest params.
+
+        Rebuilds the same IR Program the case was generated from (pure
+        function of the normalized params + target SM), re-emits and
+        re-executes the oracle.  Returns the u64 checksum as 8 LE bytes.
+        """
+        if not params.get("cpu_oracle"):
+            raise NotImplementedError(
+                "this generator_ir case has no CPU oracle (cross_build)")
+        if "ir_seed" not in params:
+            raise ValueError("cpu_oracle() expects already-normalized manifest params")
+        sm = str(target_sm or "sm_75")
+        program = self._build_program(dict(params), sm)
+        from generator_ir.emit.cpu_oracle import (
+            run_cpu_oracle_source, translate_cpu_oracle)
+        source = translate_cpu_oracle(program)
+        checksum = run_cpu_oracle_source(
+            source, timeout=self.cpu_oracle_timeout_s, input_salt=input_salt)
+        return checksum.to_bytes(8, "little")

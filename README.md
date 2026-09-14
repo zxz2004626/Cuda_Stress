@@ -171,11 +171,35 @@ endianness) — verified on-GPU by the smoke tests.  All shift amounts, divisors
 warp member masks and byte offsets are constrained at generation time; unsafe candidates
 are rejected with a reason.
 
-The IR backend does not have a complete CPU interpreter (its IR includes host-initialized
-global/constant state, atomics, synchronization and optional 2D kernels).  Its explicit
-`cross_build` oracle therefore detects compiler/configuration divergence without inventing
-an `expected.bin`.  `observable_fold` is forced on, performance warmups are disabled, and
-an input-salt rerun checks that retained checksums really depend on runtime input.
+The IR backend has an **opt-in emitted CPU C oracle** (`generator_ir` param
+`cpu_oracle: true`).  At generation time the same IR `Program` is re-rendered by
+`generator_ir/emit/cpu_oracle.py` into a self-contained C++ program (`oracle_cpu.c`,
+compiled with g++) that replays the exact Driver-checksum contract: identical input
+distribution/salt, module-global and `_cmem` initialization, launch geometry and output
+hash.  Its u64 checksum is stored in `expected.bin` (8 bytes LE) and the manifest records
+`oracle_mode: cpu_emitted`, so the existing comparator path classifies
+`ORACLE_MISMATCH` ("all stable builds agree with each other but disagree with the CPU
+oracle") — the strongest wrong-code signal, which cross-build consensus alone cannot
+produce.  Execution model: one pthread per block thread (blocks strictly sequential),
+`__syncthreads()` as a committing sense-reversing barrier, shared memory with
+commit-on-barrier semantics (reads return the value committed by the previous barrier —
+exactly the GPU lockstep result for the generator's warp-synchronous patterns), per-warp
+exchange buffers for shuffle/vote collectives, and commutative-only atomics.  Integer
+intrinsic semantics (`__byte_perm` selector nibble ignoring bit 3, funnelshift clamp at
+32, signed `__sad` difference, unsigned `__dp4a`) were verified empirically against
+sm_86 hardware.  Programs the runtime cannot mirror exactly (FP/vector types, volatile,
+wmma/cooperative-groups/pipeline raw blocks, non-checksum modes, order-sensitive
+atomics, and codegen/weave mode — its memory blocks contain device-global /
+cross-iteration handoffs whose result depends on GPU lockstep scheduling) raise
+`CpuOracleUnsupported` and the case falls back to `cross_build` — an
+oracle is never claimed when it cannot be exact.  Validation: a probe over all
+16 structured templates x 3 seeds plus 15 random seeds (RTX 3090, CUDA 12.6)
+reproduced the GPU checksum exactly in every mirrorable case (63/63; the 3
+weave cases were gated).  With `cpu_oracle` unset (the
+default), generation is byte-for-byte identical to the archived cross_build behavior.
+Its explicit `cross_build` oracle therefore remains the default mode, `observable_fold`
+is forced on, performance warmups are disabled, and an input-salt rerun checks that
+retained checksums really depend on runtime input.
 
 ### inline_ptx implementation notes
 
@@ -286,6 +310,13 @@ generate → (stress gate) → N×M compile → PTX/SASS metrics → GPU run ×3
 * The novelty score does not yet persist corpus SASS hashes across runs (per-run only).
 * No float strategies yet (float semantics, ULP and contraction policies are a future
   extension).
-* `generator_ir` uses cross-build consensus rather than an independent CPU oracle, and its
-  standalone CUDA Runtime harness does not currently provide the native runner's device
-  output guard.  Differentials should therefore be confirmed with sanitizers before filing.
+* `generator_ir` defaults to cross-build consensus; the emitted CPU oracle
+  (`cpu_oracle: true`) is integer-only and capability-gated (see above), so FP/raw-PTX
+  programs still use cross_build.  During oracle validation a genuine ptxas -O3
+  miscompilation was observed and reproduced: nvcc 12.6 `mul.hi.s64` returns 0 instead
+  of -1 for small negative literal/runtime products (`__mul64hi(1, LLONG_MIN)`),
+  while `-Xptxas=-O0` and CUDA 13.0 compute the correct value — the kind of
+  unanimous-but-wrong bug the CPU oracle is designed to catch.
+* `generator_ir`'s standalone CUDA Runtime harness does not currently provide the
+  native runner's device output guard.  Differentials should therefore be confirmed
+  with sanitizers before filing.
