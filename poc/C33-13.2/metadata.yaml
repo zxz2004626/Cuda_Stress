@@ -1,0 +1,23 @@
+id: C33
+class: miscompile
+title: cicc dual-column miscompile: 11.1 and 13.3 both emit wrong PTX, 11.3..13.0 correct
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.0/bin/nvcc
+  good_opt: -Xptxas=-O1
+  target: sm_86
+trigger_matrix_archived: "11.1/O0-O1-O2 + 13.3/O0-O1-O2（双列错：11.1 整列 + 13.3 整列，中间版本全对）"
+checksums:
+  correct: 291630905467910284
+  wrong: 10261298828832264655
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: cicc 前端（双列形态）：13.3 与 11.1 的 PTX 在全部 ptxas 下都错，11.3–13.0 正确。双版本列矩阵在归档 poc 中无先例。
+status: unfixed as of 13.3
+provenance:
+  reduced_core: reduce_out/C33_m0/textreduced.cu
+  ub_check: reduce_out/C33_m0/ub_check.json
+  cross_ptxas: reduce_out/C33_m0/rc_sweep.json

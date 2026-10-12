@@ -1,0 +1,34 @@
+id: C67
+class: miscompile
+title: ptxas -O1+ constant-folding bug since 11.8 (u64 division chain, off-by-2), unfixed
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.8/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.8/bin/nvcc
+  good_opt: -Xptxas=-O0
+  target: sm_86
+trigger_matrix_archived: "11.8/O1-O2 + 12.2/O1-O2 + 12.5/O1-O2 + 12.8/O1-O2 + 13.0/O1-O2 + 13.3/O1-O2"
+checksums:
+  correct: 16613416081537034649
+  wrong: 6136588885113614127
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: ptxas -O1+ 优化 bug（11.8 引入，未修）：lane 无关常量（u64 除法倒数链）算错，全 lane 恒差 +2。与 umul64hi（sub.s64 高位字，-O1+、11.1 起）机制不同。
+status: unfixed as of 13.3
+minimal_core:
+  file: min.cu
+  reduced: 2026-09-21
+  launch: "1 block x 8 threads, no input buffer"
+  core: "(u64)((var_1 * 9223372036854775807) mod 2^64) / ((~var_1) | 1), var_1 = 16694769789140031405; true quotient 6"
+  checksums:
+    correct_ptxas_O0: 16938453490336023656
+    wrong_ptxas_O1_O2_O3: 16938317252721529361
+  trigger_window: "ptxas -O1/-O2/-O3, CUDA 11.8..13.3 (sm_86, all local toolkits); CUDA 11.5 correct at all levels (negative control)"
+  value_level_root_cause: "reciprocal-based division sequence folds q to 0 instead of 6; in test.cu this makes (u16)v_16 = 0xbdc4 vs 0xbdc6 correct (the archived off-by-2)"
+  notes: "scheduling/context sensitive: the dead v_0/v_18/v_25 chain and the __ballot_sync statement are required context; a constant in place of the ballot kills the trigger"
+provenance:
+  reduced_core: reduce_out/C67/textreduced.cu
+  ub_check: reduce_out/C67/ub_check.json
+  cross_ptxas: reduce_out/C67/rc_sweep.json

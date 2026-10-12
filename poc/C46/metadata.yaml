@@ -1,0 +1,25 @@
+id: C46
+class: miscompile
+title: ptxas -O2/-O3 miscompile introduced in 11.6, unfixed through 13.3
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.6/bin/nvcc
+  bad_opt: -Xptxas=-O2
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.6/bin/nvcc
+  good_opt: -Xptxas=-O0
+  target: sm_86
+trigger_matrix_archived: "11.6/O2 + 11.8/O2 + 12.2/O2 + 12.5/O2 + 12.8/O2 + 13.0/O2 + 13.3/O2"
+checksums:
+  correct: 7338220735216791338
+  wrong: 12305328915047689402
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: ptxas -O2/-O3 优化 bug（-O0/-O1 正确）：cicc 11.6 生成的 PTX 被 11.6 及以后所有版本的 ptxas 在 -O2+ 编错（此前各版 ptxas 与 -O0/-O1 正确），至今未修。与已归档的 rem/div-prenot（fixed 12.2）和 umul64hi（-O1+）均不同。
+status: unfixed as of 13.3
+provenance:
+  reduced_core: reduce_out/C46/textreduced.cu
+  minimal_repro: minimal.cu
+  analysis: README.md
+  ub_check: reduce_out/C46/ub_check.json
+  cross_ptxas: reduce_out/C46/rc_sweep.json

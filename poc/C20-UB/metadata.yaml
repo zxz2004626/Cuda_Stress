@@ -1,0 +1,23 @@
+id: C20
+class: miscompile
+title: version-uniform O0-column divergence: 13.3-cicc PTX is wrong on every ptxas except 11.1
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.1/bin/nvcc
+  good_opt: -Xptxas=-O1
+  target: sm_86
+trigger_matrix_archived: "11.1/O0 + 11.3/O0 + 11.6/O0 + 11.8/O0 + 12.2/O0 + 12.5/O0 + 12.8/O0 + 13.0/O0 + 13.3/O0（错侧=全版本 O0 列）"
+checksums:
+  correct: 12073729951165030900
+  wrong: 2721586278693748655
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: cicc 13.3 前端（版本无关形态）：化简核由 cicc 13.3 编译出的 PTX 语义本身错误——除 ptxas 11.1/11.3 外，其余所有版本的 ptxas 在任何优化档都算出错值；仅 cuda-11.1 工具链给出正确值。归档 27 格矩阵为『全版本 O0 列错』，属罕见的版本无关型前端/后端一致偏离。
+status: unfixed as of 13.3
+provenance:
+  reduced_core: reduce_out/C20_m1/textreduced.cu
+  ub_check: reduce_out/C20_m1/ub_check.json
+  cross_ptxas: reduce_out/C20_m1/rc_sweep.json

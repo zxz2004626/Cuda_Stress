@@ -1,0 +1,23 @@
+id: C04
+class: miscompile
+title: ptxas -O1+ miscompiles cicc-11.3 PTX on CUDA 11.1..13.0, fixed in 13.3 (majority-wrong differential)
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.3/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-11.3/bin/nvcc
+  good_opt: -Xptxas=-O0
+  target: sm_86
+trigger_matrix_archived: "11.1/O0-O1-O2 + 11.3/O0 + 11.6/O0 + 11.8/O0 + 12.2/O0 + 12.5/O0 + 12.8/O0 + 13.0/O0 + 13.3/O0-O1-O2（错侧=多数派 11.3–13.0 的 O1/O2）"
+checksums:
+  correct: 13009286742761524257
+  wrong: 6759641714795783782
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: ptxas -O1+ 优化 bug：同一（cicc 11.3 生成的）PTX 在 ptxas 11.1/11.3/11.6/11.8/12.2/12.5/12.8/13.0 的 -O1/-O2/-O3 下全部编错（-O0 一律正确），ptxas 13.3 修复（-O1 也正确）。nvcc 13.3 全档正确，即 NVIDIA 已在 CUDA 13.3 修复此回归；本 POC 用 cuda-11.3 复现。
+status: fixed in 13.3
+provenance:
+  reduced_core: reduce_out/C04_m0/textreduced.cu
+  ub_check: reduce_out/C04_m0/ub_check.json
+  cross_ptxas: reduce_out/C04_m0/rc_sweep.json

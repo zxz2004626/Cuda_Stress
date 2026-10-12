@@ -1,0 +1,23 @@
+id: C32
+class: miscompile
+title: cicc 13.3 miscompile: wrong at every ptxas/-O level; mixed O0-column matrix
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-12.8/bin/nvcc
+  good_opt: -Xptxas=-O1
+  target: sm_86
+trigger_matrix_archived: "11.1/O0 + 11.3/O0 + 11.6/O0 + 11.8/O0 + 12.2/O0 + 12.5/O0 + 12.8/O0 + 13.0/O0 + 13.3/O0-O1-O2"
+checksums:
+  correct: 433407214484750329
+  wrong: 10138864006168268353
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+root_cause: cicc 13.3 前端错：13.3 的 PTX 在所有 ptxas 全部优化档下均错；归档矩阵中老版本的 O0 列也落在同一错值上（混合矩阵）。
+status: unfixed as of 13.3
+provenance:
+  reduced_core: reduce_out/C32_m0/textreduced.cu
+  ub_check: reduce_out/C32_m0/ub_check.json
+  cross_ptxas: reduce_out/C32_m0/rc_sweep.json

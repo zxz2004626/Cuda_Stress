@@ -1,0 +1,33 @@
+id: C66
+class: miscompile
+title: ptxas -O1-only miscompile since 11.8, unfixed through 13.3
+toolchain:
+  bad_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  bad_opt: -Xptxas=-O1
+  good_nvcc: /export/ssd1/xzhanglb/nvcc-toolkit/cuda-13.3/bin/nvcc
+  good_opt: -Xptxas=-O0
+  target: sm_86
+trigger_matrix_archived: "11.8/O1 + 12.2/O1 + 12.5/O1 + 12.8/O1 + 13.0/O1 + 13.3/O1"
+checksums:
+  correct: 1727017707039551184
+  wrong: 4501211274617234520
+sanitizer:
+  memcheck: 0 errors
+  initcheck: 0 errors
+  racecheck: 0 hazards
+minimal_core:
+  file: min.cu
+  reduced: 2026-09-21
+  launch: "1 block x 8 threads, n=8"
+  checksums:
+    correct_ptxas_O0_O2_O3: 16991622330266937562
+    wrong_ptxas_O1: 15140686756037123777
+  trigger_window: "ptxas -O1 only, CUDA 11.8..13.3 (sm_86, all local toolkits)"
+  value_level_root_cause: "v_31 = (uint)(0xFFFFFFFFFFFFFFFF / (v_11^1)) is computed as 0xFFFFFE01 instead of 1 at -O1; final output differs by constant XOR mask 0xFFFFFE00 on every thread; all other terms correct"
+  notes: "scheduling-order sensitive: renaming the kernel or moving statements can flip the trigger"
+root_cause: ptxas -O1 专有 bug：归档矩阵 11.8 起的 O1 整列错（O0/O2/O3 正确），跨 12.2 未修（最近的 -O1-only 家族 ffsll 已在 12.2 修复，故为不同缺陷）。
+status: unfixed as of 13.3
+provenance:
+  reduced_core: reduce_out/C66_m0/textreduced.cu
+  ub_check: reduce_out/C66_m0/ub_check.json
+  cross_ptxas: reduce_out/C66_m0/rc_sweep.json
